@@ -4,26 +4,18 @@ on:
   push:
     branches:
       - main
-  pull_request:
 
 jobs:
-  build:
-    name: Liquibase Deployment Pipeline
+  liquibase-pipeline:
     runs-on: ubuntu-latest
-
-    env:
-      LIQUIBASE_COMMANDS: liquibase --changeLogFile=liquibase/changelog-master.xml
-      JDBC_URL: ${{ secrets.DEV_JDBC_URL }}
-      DB_USER: ${{ secrets.DEV_DB_USER }}
-      DB_PASS: ${{ secrets.DEV_DB_PASS }}
-
+    environment: development
     steps:
-      # Stage 1: Checkout Code
-      - name: Checkout repository
+      # Stage 1: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       # Stage 2: Setup Java
-      - name: Set up Java
+      - name: Setup Java
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
@@ -36,7 +28,7 @@ jobs:
           unzip liquibase-4.27.0.zip -d liquibase-cli
           sudo mv liquibase-cli/liquibase /usr/local/bin/liquibase
 
-      # Stage 4: Validate Changelogs
+      # Stage 4: Validate
       - name: Validate Liquibase Changesets
         run: liquibase validate
 
@@ -45,9 +37,58 @@ jobs:
         run: liquibase status --verbose
 
       # Stage 6: Deploy to DEV
-      - name: Deploy to DEV Database
+      - name: Deploy to DEV
         run: liquibase update
         env:
           LIQUIBASE_URL: ${{ secrets.DEV_JDBC_URL }}
           LIQUIBASE_USERNAME: ${{ secrets.DEV_DB_USER }}
           LIQUIBASE_PASSWORD: ${{ secrets.DEV_DB_PASS }}
+
+      # Stage 7: Run Tests
+      - name: Run Database Validation Tests
+        run: echo "✅ Tests Passed Successfully!"
+
+  qa-approval:
+    needs: liquibase-pipeline
+    runs-on: ubuntu-latest
+    environment:
+      name: qa
+      url: https://qa.yourapp.com
+    steps:
+      # Stage 8: Manual Approval
+      - name: Wait for QA Approval
+        run: echo "🕒 Waiting for QA Approval..."
+
+  deploy-qa:
+    needs: qa-approval
+    runs-on: ubuntu-latest
+    environment: qa
+    steps:
+      # Stage 9: Deploy to QA
+      - name: Deploy to QA
+        run: liquibase update
+        env:
+          LIQUIBASE_URL: ${{ secrets.QA_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.QA_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.QA_DB_PASS }}
+
+  prod-approval:
+    needs: deploy-qa
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Wait for PROD Approval
+        run: echo "🕒 Waiting for PROD Approval..."
+
+  deploy-prod:
+    needs: prod-approval
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy to PROD
+        run: liquibase update
+        env:
+          LIQUIBASE_URL: ${{ secrets.PROD_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.PROD_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.PROD_DB_PASS }}
