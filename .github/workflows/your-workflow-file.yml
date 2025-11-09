@@ -1,0 +1,53 @@
+name: Liquibase CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    name: Liquibase Deployment Pipeline
+    runs-on: ubuntu-latest
+
+    env:
+      LIQUIBASE_COMMANDS: liquibase --changeLogFile=liquibase/changelog-master.xml
+      JDBC_URL: ${{ secrets.DEV_JDBC_URL }}
+      DB_USER: ${{ secrets.DEV_DB_USER }}
+      DB_PASS: ${{ secrets.DEV_DB_PASS }}
+
+    steps:
+      # Stage 1: Checkout Code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Stage 2: Setup Java
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Stage 3: Install Liquibase
+      - name: Install Liquibase
+        run: |
+          wget https://github.com/liquibase/liquibase/releases/download/v4.27.0/liquibase-4.27.0.zip
+          unzip liquibase-4.27.0.zip -d liquibase-cli
+          sudo mv liquibase-cli/liquibase /usr/local/bin/liquibase
+
+      # Stage 4: Validate Changelogs
+      - name: Validate Liquibase Changesets
+        run: liquibase validate
+
+      # Stage 5: Show Pending Changes
+      - name: Show Pending Changes
+        run: liquibase status --verbose
+
+      # Stage 6: Deploy to DEV
+      - name: Deploy to DEV Database
+        run: liquibase update
+        env:
+          LIQUIBASE_URL: ${{ secrets.DEV_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.DEV_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.DEV_DB_PASS }}
