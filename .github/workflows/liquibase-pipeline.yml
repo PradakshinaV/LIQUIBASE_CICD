@@ -1,0 +1,39 @@
+name: Liquibase CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  liquibase-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Liquibase
+        run: |
+          wget https://github.com/liquibase/liquibase/releases/download/v4.27.0/liquibase-4.27.0.zip
+          unzip liquibase-4.27.0.zip -d liquibase-cli
+          sudo mv liquibase-cli/liquibase /usr/local/bin/liquibase
+
+      - name: Validate Changesets
+        run: liquibase validate
+
+      - name: Show Pending Changes
+        run: liquibase status --verbose
+
+      - name: Deploy to DEV
+        run: liquibase update
+        env:
+          LIQUIBASE_URL: ${{ secrets.DEV_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.DEV_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.DEV_DB_PASS }}
