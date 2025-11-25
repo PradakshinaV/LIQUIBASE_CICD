@@ -8,46 +8,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      #############################################
-      # CHECKOUT
-      #############################################
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      #############################################
-      # JAVA SETUP
-      #############################################
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
           distribution: "temurin"
           java-version: "17"
 
-      #############################################
-      # INSTALL LIQUIBASE
-      #############################################
       - name: Install Liquibase
         run: |
           curl -sL https://github.com/liquibase/liquibase/releases/download/v4.29.2/liquibase-4.29.2.tar.gz | tar -xz
           sudo mv liquibase /usr/local
           echo "/usr/local/liquibase" >> $GITHUB_PATH
 
-      #############################################
-      # COPY MYSQL DRIVER & SET CLASSPATH
-      #############################################
-      - name: Create drivers directory and copy MySQL JAR
-        run: |
-          mkdir -p drivers
-          cp lib/mysql-connector-j-9.4.0.jar drivers/
-          echo "DRIVER_CP=$PWD/drivers/mysql-connector-j-9.4.0.jar" >> $GITHUB_ENV
+      - name: Ensure drivers folder exists
+        run: mkdir -p drivers
 
-      #############################################
-      # DEV ENVIRONMENT
-      #############################################
+      ############################
+      #  DEV ENVIRONMENT
+      ############################
+
       - name: Validate changesets (DEV)
         run: |
           liquibase \
-            --classpath="${{ env.DRIVER_CP }}" \
+            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.DEV_JDBC_URL }}" \
             --username="${{ secrets.DEV_DB_USER }}" \
@@ -58,7 +44,7 @@ jobs:
       - name: Update Database (DEV)
         run: |
           liquibase \
-            --classpath="${{ env.DRIVER_CP }}" \
+            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.DEV_JDBC_URL }}" \
             --username="${{ secrets.DEV_DB_USER }}" \
@@ -66,13 +52,14 @@ jobs:
             --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
             update
 
-      #############################################
-      # QA ENVIRONMENT
-      #############################################
+      ############################
+      #  QA ENVIRONMENT
+      ############################
+
       - name: Validate changesets (QA)
         run: |
           liquibase \
-            --classpath="${{ env.DRIVER_CP }}" \
+            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.QA_JDBC_URL }}" \
             --username="${{ secrets.QA_DB_USER }}" \
@@ -83,7 +70,7 @@ jobs:
       - name: Update Database (QA)
         run: |
           liquibase \
-            --classpath="${{ env.DRIVER_CP }}" \
+            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.QA_JDBC_URL }}" \
             --username="${{ secrets.QA_DB_USER }}" \
@@ -91,13 +78,14 @@ jobs:
             --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
             update
 
-      #############################################
-      # PROD ENVIRONMENT
-      #############################################
+      ############################
+      #  PROD ENVIRONMENT
+      ############################
+
       - name: Validate changesets (PROD)
         run: |
           liquibase \
-            --classpath="${{ env.DRIVER_CP }}" \
+            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.PROD_JDBC_URL }}" \
             --username="${{ secrets.PROD_DB_USER }}" \
@@ -108,7 +96,7 @@ jobs:
       - name: Update Database (PROD)
         run: |
           liquibase \
-            --classpath="${{ env.DRIVER_CP }}" \
+            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.PROD_JDBC_URL }}" \
             --username="${{ secrets.PROD_DB_USER }}" \
