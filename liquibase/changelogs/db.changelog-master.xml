@@ -8,7 +8,6 @@
 
     <!-- include the versioned changelogs in the order you want them applied -->
     <include file="changelogs/v1.0/db.changelog-v1.0.xml" relativeToChangelogFile="true"/>
-    <include file="changelogs/002-create-department.xml" relativeToChangelogFile="true"/>
-    <include file="changelogs/003-create-project.xml" relativeToChangelogFile="true"/>
+    
 
 </databaseChangeLog>
