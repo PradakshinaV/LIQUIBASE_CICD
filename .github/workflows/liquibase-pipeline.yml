@@ -22,9 +22,11 @@ jobs:
 
       - name: Install Liquibase
         run: |
+          rm -rf liquibase
           wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip -o liquibase-4.28.0.zip
-          sudo mv liquibase /usr/local/bin/liquibase
+          unzip liquibase-4.28.0.zip -d liquibase
+          sudo ln -s $PWD/liquibase/liquibase /usr/local/bin/liquibase
+          chmod +x liquibase/liquibase
 
       - name: Check Liquibase version
         run: liquibase --version
@@ -64,9 +66,11 @@ jobs:
 
       - name: Install Liquibase
         run: |
+          rm -rf liquibase
           wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip -o liquibase-4.28.0.zip
-          sudo mv liquibase /usr/local/bin/liquibase
+          unzip liquibase-4.28.0.zip -d liquibase
+          sudo ln -s $PWD/liquibase/liquibase /usr/local/bin/liquibase
+          chmod +x liquibase/liquibase
 
       - name: Validate changesets (QA)
         run: |
@@ -103,9 +107,11 @@ jobs:
 
       - name: Install Liquibase
         run: |
+          rm -rf liquibase
           wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip -o liquibase-4.28.0.zip
-          sudo mv liquibase /usr/local/bin/liquibase
+          unzip liquibase-4.28.0.zip -d liquibase
+          sudo ln -s $PWD/liquibase/liquibase /usr/local/bin/liquibase
+          chmod +x liquibase/liquibase
 
       - name: Validate changesets (PROD)
         run: |
