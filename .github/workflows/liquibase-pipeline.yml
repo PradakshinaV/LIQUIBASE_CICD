@@ -28,19 +28,13 @@ jobs:
           sudo ln -s $PWD/liquibase/liquibase /usr/local/bin/liquibase
           chmod +x liquibase/liquibase
 
-      - name: Install MySQL JDBC driver
-        run: |
-          wget https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar
-          mkdir -p $HOME/liquibase/lib
-          cp mysql-connector-j-8.4.0.jar $HOME/liquibase/lib/
-
       - name: Check Liquibase version
         run: liquibase --version
 
       - name: Validate changesets (DEV)
         run: |
           liquibase \
-            --classpath="$HOME/liquibase/lib" \
+            --classpath="lib/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.DEV_JDBC_URL }}" \
             --username="${{ secrets.DEV_DB_USER }}" \
@@ -51,7 +45,7 @@ jobs:
       - name: Deploy to DEV
         run: |
           liquibase \
-            --classpath="$HOME/liquibase/lib" \
+            --classpath="lib/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.DEV_JDBC_URL }}" \
             --username="${{ secrets.DEV_DB_USER }}" \
@@ -82,16 +76,10 @@ jobs:
           sudo ln -s $PWD/liquibase/liquibase /usr/local/bin/liquibase
           chmod +x liquibase/liquibase
 
-      - name: Install MySQL JDBC driver
-        run: |
-          wget https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar
-          mkdir -p $HOME/liquibase/lib
-          cp mysql-connector-j-8.4.0.jar $HOME/liquibase/lib/
-
       - name: Validate changesets (QA)
         run: |
           liquibase \
-            --classpath="$HOME/liquibase/lib" \
+            --classpath="lib/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.QA_JDBC_URL }}" \
             --username="${{ secrets.QA_DB_USER }}" \
@@ -102,7 +90,7 @@ jobs:
       - name: Deploy to QA
         run: |
           liquibase \
-            --classpath="$HOME/liquibase/lib" \
+            --classpath="lib/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.QA_JDBC_URL }}" \
             --username="${{ secrets.QA_DB_USER }}" \
@@ -133,16 +121,10 @@ jobs:
           sudo ln -s $PWD/liquibase/liquibase /usr/local/bin/liquibase
           chmod +x liquibase/liquibase
 
-      - name: Install MySQL JDBC driver
-        run: |
-          wget https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar
-          mkdir -p $HOME/liquibase/lib
-          cp mysql-connector-j-8.4.0.jar $HOME/liquibase/lib/
-
       - name: Validate changesets (PROD)
         run: |
           liquibase \
-            --classpath="$HOME/liquibase/lib" \
+            --classpath="lib/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.PROD_JDBC_URL }}" \
             --username="${{ secrets.PROD_DB_USER }}" \
@@ -153,7 +135,7 @@ jobs:
       - name: Deploy to PROD
         run: |
           liquibase \
-            --classpath="$HOME/liquibase/lib" \
+            --classpath="lib/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.PROD_JDBC_URL }}" \
             --username="${{ secrets.PROD_DB_USER }}" \
