@@ -1,4 +1,4 @@
-name: Liquibase Pipeline
+name: Liquibase CI/CD Pipeline
 
 on:
   push:
@@ -7,47 +7,148 @@ on:
   workflow_dispatch:
 
 jobs:
-  run-liquibase:
+  liquibase-pipeline:
     runs-on: ubuntu-latest
+    environment: dev
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Setup Java
         uses: actions/setup-java@v3
         with:
-          java-version: '17'
           distribution: 'temurin'
+          java-version: '17'
 
       - name: Download MySQL JDBC Driver
         run: |
           mkdir -p drivers
-          curl -L -o drivers/mysql-connector-j.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.0.0/mysql-connector-j-9.0.0.jar
+          curl -L -o drivers/mysql-connector-j.jar \
+            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.0.0/mysql-connector-j-9.0.0.jar
 
       - name: Install Liquibase
         run: |
-          mkdir liquibase
-          curl -L -o liquibase/liquibase.zip https://github.com/liquibase/liquibase/releases/download/v4.30.0/liquibase-4.30.0.zip
-          unzip liquibase/liquibase.zip -d liquibase
+          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
+          unzip -o liquibase-4.28.0.zip
+          sudo mv liquibase-4.28.0 /opt/liquibase
+          echo "/opt/liquibase" >> $GITHUB_PATH
 
-      - name: Verify directory structure
-        run: |
-          echo "Current directory:"
-          pwd
-          echo "Files:"
-          ls -R
+      - name: Check Liquibase version
+        run: liquibase --version
 
-      - name: Run Liquibase Update
-        env:
-          DB_URL: ${{ secrets.DB_URL }}
-          DB_USERNAME: ${{ secrets.DB_USERNAME }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      - name: Validate changesets (DEV)
         run: |
-          liquibase/liquibase-4.30.0/liquibase \
+          liquibase \
             --classpath=drivers/mysql-connector-j.jar \
-            --url="$DB_URL" \
-            --username="$DB_USERNAME" \
-            --password="$DB_PASSWORD" \
-            --changeLogFile=changelog/changelog.xml \
+            validate
+        env:
+          LIQUIBASE_URL: ${{ secrets.DEV_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.DEV_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.DEV_DB_PASS }}
+
+      - name: Deploy to DEV
+        run: |
+          liquibase \
+            --classpath=drivers/mysql-connector-j.jar \
             update
+        env:
+          LIQUIBASE_URL: ${{ secrets.DEV_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.DEV_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.DEV_DB_PASS }}
+
+  promote-to-qa:
+    needs: liquibase-pipeline
+    runs-on: ubuntu-latest
+    environment: qa
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Liquibase
+        run: |
+          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
+          unzip -o liquibase-4.28.0.zip
+          sudo mv liquibase-4.28.0 /opt/liquibase
+          echo "/opt/liquibase" >> $GITHUB_PATH
+
+      - name: Download MySQL JDBC Driver
+        run: |
+          mkdir -p drivers
+          curl -L -o drivers/mysql-connector-j.jar \
+            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.0.0/mysql-connector-j-9.0.0.jar
+
+      - name: Validate changesets (QA)
+        run: |
+          liquibase \
+            --classpath=drivers/mysql-connector-j.jar \
+            validate
+        env:
+          LIQUIBASE_URL: ${{ secrets.QA_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.QA_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.QA_DB_PASS }}
+
+      - name: Deploy to QA
+        run: |
+          liquibase \
+            --classpath=drivers/mysql-connector-j.jar \
+            update
+        env:
+          LIQUIBASE_URL: ${{ secrets.QA_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.QA_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.QA_DB_PASS }}
+
+  promote-to-prod:
+    needs: promote-to-qa
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Liquibase
+        run: |
+          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
+          unzip -o liquibase-4.28.0.zip
+          sudo mv liquibase-4.28.0 /opt/liquibase
+          echo "/opt/liquibase" >> $GITHUB_PATH
+
+      - name: Download MySQL JDBC Driver
+        run: |
+          mkdir -p drivers
+          curl -L -o drivers/mysql-connector-j.jar \
+            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.0.0/mysql-connector-j-9.0.0.jar
+
+      - name: Validate changesets (PROD)
+        run: |
+          liquibase \
+            --classpath=drivers/mysql-connector-j.jar \
+            validate
+        env:
+          LIQUIBASE_URL: ${{ secrets.PROD_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.PROD_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.PROD_DB_PASS }}
+
+      - name: Deploy to PROD
+        run: |
+          liquibase \
+            --classpath=drivers/mysql-connector-j.jar \
+            update
+        env:
+          LIQUIBASE_URL: ${{ secrets.PROD_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.PROD_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.PROD_DB_PASS }}
