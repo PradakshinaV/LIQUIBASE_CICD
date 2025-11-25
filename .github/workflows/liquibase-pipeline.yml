@@ -1,40 +1,41 @@
-name: Liquibase CI/CD Pipeline
+name: Liquibase Pipeline
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
-  liquibase-pipeline:
+  liquibase-deploy:
     runs-on: ubuntu-latest
-    environment: dev
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Setup Java
+      - name: Set up Java
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: Install Liquibase
         run: |
-          rm -rf liquibase
-          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip liquibase-4.28.0.zip -d liquibase
-          sudo ln -s $PWD/liquibase/liquibase /usr/local/bin/liquibase
-          chmod +x liquibase/liquibase
+          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.29.2/liquibase-4.29.2.tar.gz | tar -xz
+          sudo mv liquibase /usr/local
+          echo "/usr/local/liquibase" >> $GITHUB_PATH
 
-      - name: Check Liquibase version
-        run: liquibase --version
+      - name: Create drivers directory and copy MySQL JAR
+        run: |
+          mkdir -p drivers
+          cp lib/mysql-connector-j-9.4.0.jar drivers/
+
+      ############################
+      #  DEV ENVIRONMENT
+      ############################
 
       - name: Validate changesets (DEV)
         run: |
           liquibase \
---classpath="drivers/mysql-connector-j-9.4.0.jar"
+            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.DEV_JDBC_URL }}" \
             --username="${{ secrets.DEV_DB_USER }}" \
@@ -42,10 +43,10 @@ jobs:
             --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
             validate
 
-      - name: Deploy to DEV
+      - name: Update Database (DEV)
         run: |
           liquibase \
---classpath="drivers/mysql-connector-j-9.4.0.jar"
+            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.DEV_JDBC_URL }}" \
             --username="${{ secrets.DEV_DB_USER }}" \
@@ -53,33 +54,14 @@ jobs:
             --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
             update
 
-  promote-to-qa:
-    needs: liquibase-pipeline
-    runs-on: ubuntu-latest
-    environment: qa
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Install Liquibase
-        run: |
-          rm -rf liquibase
-          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip liquibase-4.28.0.zip -d liquibase
-          sudo ln -s $PWD/liquibase/liquibase /usr/local/bin/liquibase
-          chmod +x liquibase/liquibase
+      ############################
+      #  QA ENVIRONMENT
+      ############################
 
       - name: Validate changesets (QA)
         run: |
           liquibase \
---classpath="drivers/mysql-connector-j-9.4.0.jar"
+            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.QA_JDBC_URL }}" \
             --username="${{ secrets.QA_DB_USER }}" \
@@ -87,10 +69,10 @@ jobs:
             --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
             validate
 
-      - name: Deploy to QA
+      - name: Update Database (QA)
         run: |
           liquibase \
---classpath="drivers/mysql-connector-j-9.4.0.jar"
+            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.QA_JDBC_URL }}" \
             --username="${{ secrets.QA_DB_USER }}" \
@@ -98,33 +80,14 @@ jobs:
             --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
             update
 
-  promote-to-prod:
-    needs: promote-to-qa
-    runs-on: ubuntu-latest
-    environment: production
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Install Liquibase
-        run: |
-          rm -rf liquibase
-          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip liquibase-4.28.0.zip -d liquibase
-          sudo ln -s $PWD/liquibase/liquibase /usr/local/bin/liquibase
-          chmod +x liquibase/liquibase
+      ############################
+      #  PROD ENVIRONMENT
+      ############################
 
       - name: Validate changesets (PROD)
         run: |
           liquibase \
---classpath="drivers/mysql-connector-j-9.4.0.jar"
+            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.PROD_JDBC_URL }}" \
             --username="${{ secrets.PROD_DB_USER }}" \
@@ -132,10 +95,10 @@ jobs:
             --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
             validate
 
-      - name: Deploy to PROD
+      - name: Update Database (PROD)
         run: |
           liquibase \
---classpath="drivers/mysql-connector-j-9.4.0.jar"
+            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.PROD_JDBC_URL }}" \
             --username="${{ secrets.PROD_DB_USER }}" \
