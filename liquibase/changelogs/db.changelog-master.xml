@@ -7,5 +7,4 @@
 
     <include file="changelogs/v1.0/db.changelog-v1.0.xml" relativeToChangelogFile="false"/>
     <include file="changelogs/002-create-department.xml"/>
-
 </databaseChangeLog>
