@@ -30,9 +30,9 @@ jobs:
 
       - name: Install MySQL JDBC driver
         run: |
-          wget https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.33/mysql-connector-java-8.0.33.jar
+          wget https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar
           mkdir -p ~/liquibase/lib
-          cp mysql-connector-java-8.0.33.jar ~/liquibase/lib/
+          cp mysql-connector-j-8.4.0.jar ~/liquibase/lib/
 
       - name: Check Liquibase version
         run: liquibase --version
@@ -84,9 +84,9 @@ jobs:
 
       - name: Install MySQL JDBC driver
         run: |
-          wget https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.33/mysql-connector-java-8.0.33.jar
+          wget https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar
           mkdir -p ~/liquibase/lib
-          cp mysql-connector-java-8.0.33.jar ~/liquibase/lib/
+          cp mysql-connector-j-8.4.0.jar ~/liquibase/lib/
 
       - name: Validate changesets (QA)
         run: |
@@ -135,9 +135,9 @@ jobs:
 
       - name: Install MySQL JDBC driver
         run: |
-          wget https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.33/mysql-connector-java-8.0.33.jar
+          wget https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar
           mkdir -p ~/liquibase/lib
-          cp mysql-connector-java-8.0.33.jar ~/liquibase/lib/
+          cp mysql-connector-j-8.4.0.jar ~/liquibase/lib/
 
       - name: Validate changesets (PROD)
         run: |
