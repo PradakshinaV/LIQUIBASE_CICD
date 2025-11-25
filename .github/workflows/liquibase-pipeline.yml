@@ -1,10 +1,13 @@
 name: Liquibase Pipeline
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
-  liquibase-deploy:
+  run-liquibase:
     runs-on: ubuntu-latest
 
     steps:
@@ -14,92 +17,37 @@ jobs:
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
-          distribution: "temurin"
-          java-version: "17"
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Download MySQL JDBC Driver
+        run: |
+          mkdir -p drivers
+          curl -L -o drivers/mysql-connector-j.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.0.0/mysql-connector-j-9.0.0.jar
 
       - name: Install Liquibase
         run: |
-          curl -sL https://github.com/liquibase/liquibase/releases/download/v4.29.2/liquibase-4.29.2.tar.gz | tar -xz
-          sudo mv liquibase /usr/local
-          echo "/usr/local/liquibase" >> $GITHUB_PATH
+          mkdir liquibase
+          curl -L -o liquibase/liquibase.zip https://github.com/liquibase/liquibase/releases/download/v4.30.0/liquibase-4.30.0.zip
+          unzip liquibase/liquibase.zip -d liquibase
 
-      - name: Ensure drivers folder exists
-        run: mkdir -p drivers
-
-      ############################
-      #  DEV ENVIRONMENT
-      ############################
-
-      - name: Validate changesets (DEV)
+      - name: Verify directory structure
         run: |
-          liquibase \
-            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
-            --driver="com.mysql.cj.jdbc.Driver" \
-            --url="${{ secrets.DEV_JDBC_URL }}" \
-            --username="${{ secrets.DEV_DB_USER }}" \
-            --password="${{ secrets.DEV_DB_PASS }}" \
-            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
-            validate
+          echo "Current directory:"
+          pwd
+          echo "Files:"
+          ls -R
 
-      - name: Update Database (DEV)
+      - name: Run Liquibase Update
+        env:
+          DB_URL: ${{ secrets.DB_URL }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
-          liquibase \
-            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
-            --driver="com.mysql.cj.jdbc.Driver" \
-            --url="${{ secrets.DEV_JDBC_URL }}" \
-            --username="${{ secrets.DEV_DB_USER }}" \
-            --password="${{ secrets.DEV_DB_PASS }}" \
-            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
-            update
-
-      ############################
-      #  QA ENVIRONMENT
-      ############################
-
-      - name: Validate changesets (QA)
-        run: |
-          liquibase \
-            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
-            --driver="com.mysql.cj.jdbc.Driver" \
-            --url="${{ secrets.QA_JDBC_URL }}" \
-            --username="${{ secrets.QA_DB_USER }}" \
-            --password="${{ secrets.QA_DB_PASS }}" \
-            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
-            validate
-
-      - name: Update Database (QA)
-        run: |
-          liquibase \
-            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
-            --driver="com.mysql.cj.jdbc.Driver" \
-            --url="${{ secrets.QA_JDBC_URL }}" \
-            --username="${{ secrets.QA_DB_USER }}" \
-            --password="${{ secrets.QA_DB_PASS }}" \
-            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
-            update
-
-      ############################
-      #  PROD ENVIRONMENT
-      ############################
-
-      - name: Validate changesets (PROD)
-        run: |
-          liquibase \
-            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
-            --driver="com.mysql.cj.jdbc.Driver" \
-            --url="${{ secrets.PROD_JDBC_URL }}" \
-            --username="${{ secrets.PROD_DB_USER }}" \
-            --password="${{ secrets.PROD_DB_PASS }}" \
-            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
-            validate
-
-      - name: Update Database (PROD)
-        run: |
-          liquibase \
-            --classpath="drivers/mysql-connector-j-9.4.0.jar" \
-            --driver="com.mysql.cj.jdbc.Driver" \
-            --url="${{ secrets.PROD_JDBC_URL }}" \
-            --username="${{ secrets.PROD_DB_USER }}" \
-            --password="${{ secrets.PROD_DB_PASS }}" \
-            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+          liquibase/liquibase-4.30.0/liquibase \
+            --classpath=drivers/mysql-connector-j.jar \
+            --url="$DB_URL" \
+            --username="$DB_USERNAME" \
+            --password="$DB_PASSWORD" \
+            --changeLogFile=changelog/changelog.xml \
             update
