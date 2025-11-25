@@ -23,30 +23,35 @@ jobs:
       - name: Install Liquibase
         run: |
           wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip -o liquibase-4.28.0.zip -d liquibase-4.28.0
-          sudo mv liquibase-4.28.0 /opt/liquibase
-          echo "/opt/liquibase" >> $GITHUB_PATH
+          unzip -o liquibase-4.28.0.zip
+          sudo mv liquibase /usr/local/bin/liquibase
+
       - name: Check Liquibase version
         run: liquibase --version
 
       - name: Validate changesets (DEV)
-        run: liquibase validate
-        env:
-          LIQUIBASE_URL: ${{ secrets.DEV_JDBC_URL }}
-          LIQUIBASE_USERNAME: ${{ secrets.DEV_DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.DEV_DB_PASS }}
+        run: |
+          liquibase \
+            --url="${{ secrets.DEV_JDBC_URL }}" \
+            --username="${{ secrets.DEV_DB_USER }}" \
+            --password="${{ secrets.DEV_DB_PASS }}" \
+            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+            validate
 
       - name: Deploy to DEV
-        run: liquibase update
-        env:
-          LIQUIBASE_URL: ${{ secrets.DEV_JDBC_URL }}
-          LIQUIBASE_USERNAME: ${{ secrets.DEV_DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.DEV_DB_PASS }}
+        run: |
+          liquibase \
+            --url="${{ secrets.DEV_JDBC_URL }}" \
+            --username="${{ secrets.DEV_DB_USER }}" \
+            --password="${{ secrets.DEV_DB_PASS }}" \
+            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+            update
 
   promote-to-qa:
     needs: liquibase-pipeline
     runs-on: ubuntu-latest
     environment: qa
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,28 +65,32 @@ jobs:
       - name: Install Liquibase
         run: |
           wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip -o liquibase-4.28.0.zip -d liquibase-4.28.0
-          sudo mv liquibase-4.28.0 /opt/liquibase
-          echo "/opt/liquibase" >> $GITHUB_PATH
+          unzip -o liquibase-4.28.0.zip
+          sudo mv liquibase /usr/local/bin/liquibase
 
       - name: Validate changesets (QA)
-        run: liquibase validate
-        env:
-          LIQUIBASE_URL: ${{ secrets.QA_JDBC_URL }}
-          LIQUIBASE_USERNAME: ${{ secrets.QA_DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.QA_DB_PASS }}
+        run: |
+          liquibase \
+            --url="${{ secrets.QA_JDBC_URL }}" \
+            --username="${{ secrets.QA_DB_USER }}" \
+            --password="${{ secrets.QA_DB_PASS }}" \
+            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+            validate
 
       - name: Deploy to QA
-        run: liquibase update
-        env:
-          LIQUIBASE_URL: ${{ secrets.QA_JDBC_URL }}
-          LIQUIBASE_USERNAME: ${{ secrets.QA_DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.QA_DB_PASS }}
+        run: |
+          liquibase \
+            --url="${{ secrets.QA_JDBC_URL }}" \
+            --username="${{ secrets.QA_DB_USER }}" \
+            --password="${{ secrets.QA_DB_PASS }}" \
+            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+            update
 
   promote-to-prod:
     needs: promote-to-qa
     runs-on: ubuntu-latest
     environment: production
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -95,20 +104,23 @@ jobs:
       - name: Install Liquibase
         run: |
           wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip -o liquibase-4.28.0.zip -d liquibase-4.28.0
-          sudo mv liquibase-4.28.0 /opt/liquibase
-          echo "/opt/liquibase" >> $GITHUB_PATH
+          unzip -o liquibase-4.28.0.zip
+          sudo mv liquibase /usr/local/bin/liquibase
 
       - name: Validate changesets (PROD)
-        run: liquibase validate
-        env:
-          LIQUIBASE_URL: ${{ secrets.PROD_JDBC_URL }}
-          LIQUIBASE_USERNAME: ${{ secrets.PROD_DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.PROD_DB_PASS }}
+        run: |
+          liquibase \
+            --url="${{ secrets.PROD_JDBC_URL }}" \
+            --username="${{ secrets.PROD_DB_USER }}" \
+            --password="${{ secrets.PROD_DB_PASS }}" \
+            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+            validate
 
       - name: Deploy to PROD
-        run: liquibase update
-        env:
-          LIQUIBASE_URL: ${{ secrets.PROD_JDBC_URL }}
-          LIQUIBASE_USERNAME: ${{ secrets.PROD_DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.PROD_DB_PASS }}
+        run: |
+          liquibase \
+            --url="${{ secrets.PROD_JDBC_URL }}" \
+            --username="${{ secrets.PROD_DB_USER }}" \
+            --password="${{ secrets.PROD_DB_PASS }}" \
+            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+            update
