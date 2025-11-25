@@ -1,29 +1,70 @@
-name: liquibase-pipeline
+name: Liquibase CI/CD Pipeline
 
 on:
   push:
+    branches:
+      - main
 
 jobs:
   liquibase-pipeline:
     runs-on: ubuntu-latest
-    
+    environment: dev
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
       - name: Install Liquibase
         run: |
           wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip -o liquibase-4.28.0.zip
-          # The extracted folder is named "liquibase" → rename it
-          mv liquibase liquibase-4.28.0
-          sudo mv liquibase-4.28.0 /usr/local/bin/liquibase
-          echo "/usr/local/bin/liquibase" >> $GITHUB_PATH
-
-      - name: Check Liquibase Version
+          unzip -o liquibase-4.28.0.zip -d liquibase-4.28.0
+          sudo mv liquibase-4.28.0 /opt/liquibase
+          echo "/opt/liquibase" >> $GITHUB_PATH
+      - name: Check Liquibase version
         run: liquibase --version
 
-      - name: Validate changesets for QA
+      - name: Validate changesets (DEV)
+        run: liquibase validate
+        env:
+          LIQUIBASE_URL: ${{ secrets.DEV_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.DEV_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.DEV_DB_PASS }}
+
+      - name: Deploy to DEV
+        run: liquibase update
+        env:
+          LIQUIBASE_URL: ${{ secrets.DEV_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.DEV_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.DEV_DB_PASS }}
+
+  promote-to-qa:
+    needs: liquibase-pipeline
+    runs-on: ubuntu-latest
+    environment: qa
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Liquibase
+        run: |
+          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
+          unzip -o liquibase-4.28.0.zip -d liquibase-4.28.0
+          sudo mv liquibase-4.28.0 /opt/liquibase
+          echo "/opt/liquibase" >> $GITHUB_PATH
+
+      - name: Validate changesets (QA)
         run: liquibase validate
         env:
           LIQUIBASE_URL: ${{ secrets.QA_JDBC_URL }}
@@ -36,3 +77,38 @@ jobs:
           LIQUIBASE_URL: ${{ secrets.QA_JDBC_URL }}
           LIQUIBASE_USERNAME: ${{ secrets.QA_DB_USER }}
           LIQUIBASE_PASSWORD: ${{ secrets.QA_DB_PASS }}
+
+  promote-to-prod:
+    needs: promote-to-qa
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Liquibase
+        run: |
+          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
+          unzip -o liquibase-4.28.0.zip -d liquibase-4.28.0
+          sudo mv liquibase-4.28.0 /opt/liquibase
+          echo "/opt/liquibase" >> $GITHUB_PATH
+
+      - name: Validate changesets (PROD)
+        run: liquibase validate
+        env:
+          LIQUIBASE_URL: ${{ secrets.PROD_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.PROD_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.PROD_DB_PASS }}
+
+      - name: Deploy to PROD
+        run: liquibase update
+        env:
+          LIQUIBASE_URL: ${{ secrets.PROD_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.PROD_DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.PROD_DB_PASS }}
