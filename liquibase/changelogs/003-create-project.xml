@@ -6,16 +6,15 @@
        http://www.liquibase.org/xml/ns/dbchangelog
        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
 
-    <changeSet id="002-create-department" author="DevA">
-        <createTable tableName="department">
-            <column name="dept_id" type="INT" autoIncrement="true">
+    <changeSet id="003-create-project" author="DevB">
+        <createTable tableName="project">
+            <column name="project_id" type="INT" autoIncrement="true">
                 <constraints primaryKey="true"/>
             </column>
-            <column name="dept_name" type="VARCHAR(50)" />
-            <column name="location" type="VARCHAR(100)" />
+            <column name="project_name" type="VARCHAR(100)" />
         </createTable>
         <rollback>
-            <dropTable tableName="department"/>
+            <dropTable tableName="project"/>
         </rollback>
     </changeSet>
 

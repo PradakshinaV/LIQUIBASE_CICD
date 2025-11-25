@@ -2,11 +2,13 @@
 <databaseChangeLog
     xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
-                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+    xsi:schemaLocation="
+        http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
 
     <include file="changelogs/v1.0/db.changelog-v1.0.xml" relativeToChangelogFile="false"/>
     <include file="changelogs/003-create-project.xml"/>
 
 
+    <include file="changelogs/002-create-department.xml"/>
 </databaseChangeLog>
