@@ -6,8 +6,7 @@
        http://www.liquibase.org/xml/ns/dbchangelog
        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
 
-    <!-- Changeset 1: Create initial tables -->
-    <changeSet id="1" author="admin">
+    <changeSet id="v1-1-create-users-roles" author="admin">
         <createTable tableName="users">
             <column name="id" type="INT" autoIncrement="true">
                 <constraints primaryKey="true" nullable="false"/>
@@ -35,8 +34,7 @@
         </rollback>
     </changeSet>
 
-    <!-- Changeset 2: Add role_id column -->
-    <changeSet id="2" author="admin">
+    <changeSet id="v1-2-add-roleid-to-users" author="admin">
         <addColumn tableName="users">
             <column name="role_id" type="INT"/>
         </addColumn>
@@ -45,8 +43,7 @@
         </rollback>
     </changeSet>
 
-    <!-- Changeset 3: Add foreign key constraint -->
-    <changeSet id="3" author="admin">
+    <changeSet id="v1-3-fk-users-roles" author="admin">
         <addForeignKeyConstraint
             baseTableName="users"
             baseColumnNames="role_id"
@@ -56,14 +53,11 @@
             onDelete="CASCADE"
             onUpdate="CASCADE"/>
         <rollback>
-            <dropForeignKeyConstraint
-                baseTableName="users"
-                constraintName="fk_users_roles"/>
+            <dropForeignKeyConstraint baseTableName="users" constraintName="fk_users_roles"/>
         </rollback>
     </changeSet>
 
-    <!-- Changeset 4: Create indexes -->
-    <changeSet id="4" author="admin">
+    <changeSet id="v1-4-create-indexes" author="admin">
         <createIndex indexName="idx_users_username" tableName="users">
             <column name="username"/>
         </createIndex>
@@ -76,8 +70,7 @@
         </rollback>
     </changeSet>
 
-    <!-- Changeset 5: Insert reference data -->
-    <changeSet id="5" author="admin">
+    <changeSet id="v1-5-insert-roles" author="admin">
         <insert tableName="roles">
             <column name="role_name" value="Admin"/>
         </insert>
@@ -87,7 +80,6 @@
         <insert tableName="roles">
             <column name="role_name" value="Guest"/>
         </insert>
-
         <rollback>
             <delete tableName="roles">
                 <where>role_name IN ('Admin','User','Guest')</where>
@@ -95,8 +87,7 @@
         </rollback>
     </changeSet>
 
-    <!-- Changeset 6: Add phone column -->
-    <changeSet id="6" author="admin">
+    <changeSet id="v1-6-add-phone-to-users" author="admin">
         <addColumn tableName="users">
             <column name="phone" type="VARCHAR(15)"/>
         </addColumn>

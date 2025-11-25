@@ -1,0 +1,132 @@
+name: Liquibase CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  liquibase-pipeline:
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Liquibase
+        run: |
+          rm -rf liquibase
+          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
+          unzip liquibase-4.28.0.zip -d liquibase
+          sudo ln -s $PWD/liquibase/liquibase /usr/local/bin/liquibase
+          chmod +x liquibase/liquibase
+
+      - name: Check Liquibase version
+        run: liquibase --version
+
+      - name: Validate changesets (DEV)
+        run: |
+          liquibase \
+            --url="${{ secrets.DEV_JDBC_URL }}" \
+            --username="${{ secrets.DEV_DB_USER }}" \
+            --password="${{ secrets.DEV_DB_PASS }}" \
+            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+            validate
+
+      - name: Deploy to DEV
+        run: |
+          liquibase \
+            --url="${{ secrets.DEV_JDBC_URL }}" \
+            --username="${{ secrets.DEV_DB_USER }}" \
+            --password="${{ secrets.DEV_DB_PASS }}" \
+            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+            update
+
+  promote-to-qa:
+    needs: liquibase-pipeline
+    runs-on: ubuntu-latest
+    environment: qa
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Liquibase
+        run: |
+          rm -rf liquibase
+          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
+          unzip liquibase-4.28.0.zip -d liquibase
+          sudo ln -s $PWD/liquibase/liquibase /usr/local/bin/liquibase
+          chmod +x liquibase/liquibase
+
+      - name: Validate changesets (QA)
+        run: |
+          liquibase \
+            --url="${{ secrets.QA_JDBC_URL }}" \
+            --username="${{ secrets.QA_DB_USER }}" \
+            --password="${{ secrets.QA_DB_PASS }}" \
+            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+            validate
+
+      - name: Deploy to QA
+        run: |
+          liquibase \
+            --url="${{ secrets.QA_JDBC_URL }}" \
+            --username="${{ secrets.QA_DB_USER }}" \
+            --password="${{ secrets.QA_DB_PASS }}" \
+            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+            update
+
+  promote-to-prod:
+    needs: promote-to-qa
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Liquibase
+        run: |
+          rm -rf liquibase
+          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
+          unzip liquibase-4.28.0.zip -d liquibase
+          sudo ln -s $PWD/liquibase/liquibase /usr/local/bin/liquibase
+          chmod +x liquibase/liquibase
+
+      - name: Validate changesets (PROD)
+        run: |
+          liquibase \
+            --url="${{ secrets.PROD_JDBC_URL }}" \
+            --username="${{ secrets.PROD_DB_USER }}" \
+            --password="${{ secrets.PROD_DB_PASS }}" \
+            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+            validate
+
+      - name: Deploy to PROD
+        run: |
+          liquibase \
+            --url="${{ secrets.PROD_JDBC_URL }}" \
+            --username="${{ secrets.PROD_DB_USER }}" \
+            --password="${{ secrets.PROD_DB_PASS }}" \
+            --changelog-file="liquibase/changelogs/db.changelog-master.xml" \
+            update
