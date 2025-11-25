@@ -34,7 +34,7 @@ jobs:
       - name: Validate changesets (DEV)
         run: |
           liquibase \
-            --classpath="liquibase/lib/mysql-connector-j-9.4.0.jar" \
+--classpath="drivers/mysql-connector-j-9.4.0.jar"
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.DEV_JDBC_URL }}" \
             --username="${{ secrets.DEV_DB_USER }}" \
@@ -45,7 +45,7 @@ jobs:
       - name: Deploy to DEV
         run: |
           liquibase \
-            --classpath="liquibase/lib/mysql-connector-j-9.4.0.jar" \
+--classpath="drivers/mysql-connector-j-9.4.0.jar"
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.DEV_JDBC_URL }}" \
             --username="${{ secrets.DEV_DB_USER }}" \
@@ -79,7 +79,7 @@ jobs:
       - name: Validate changesets (QA)
         run: |
           liquibase \
-            --classpath="liquibase/lib/mysql-connector-j-9.4.0.jar" \
+--classpath="drivers/mysql-connector-j-9.4.0.jar"
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.QA_JDBC_URL }}" \
             --username="${{ secrets.QA_DB_USER }}" \
@@ -90,7 +90,7 @@ jobs:
       - name: Deploy to QA
         run: |
           liquibase \
-            --classpath="liquibase/lib/mysql-connector-j-9.4.0.jar" \
+--classpath="drivers/mysql-connector-j-9.4.0.jar"
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.QA_JDBC_URL }}" \
             --username="${{ secrets.QA_DB_USER }}" \
@@ -124,7 +124,7 @@ jobs:
       - name: Validate changesets (PROD)
         run: |
           liquibase \
-            --classpath="liquibase/lib/mysql-connector-j-9.4.0.jar" \
+--classpath="drivers/mysql-connector-j-9.4.0.jar"
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.PROD_JDBC_URL }}" \
             --username="${{ secrets.PROD_DB_USER }}" \
@@ -135,7 +135,7 @@ jobs:
       - name: Deploy to PROD
         run: |
           liquibase \
-            --classpath="liquibase/lib/mysql-connector-j-9.4.0.jar" \
+--classpath="drivers/mysql-connector-j-9.4.0.jar"
             --driver="com.mysql.cj.jdbc.Driver" \
             --url="${{ secrets.PROD_JDBC_URL }}" \
             --username="${{ secrets.PROD_DB_USER }}" \
