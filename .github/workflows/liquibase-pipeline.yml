@@ -24,38 +24,65 @@ jobs:
       - name: Download MySQL JDBC Driver
         run: |
           mkdir -p drivers
-          curl -L -o drivers/mysql-connector-j.jar \
-            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.0.0/mysql-connector-j-9.0.0.jar
+          curl -L -o drivers/mysql-connector-j-9.4.0.jar \
+            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
 
       - name: Install Liquibase
         run: |
-          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip -o liquibase-4.28.0.zip
-          sudo mv liquibase-4.28.0 /opt/liquibase
+          wget -q https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
+          unzip -q -o liquibase-4.28.0.zip -d liquibase-install
+          sudo mv liquibase-install /opt/liquibase
+          sudo chmod +x /opt/liquibase/liquibase
           echo "/opt/liquibase" >> $GITHUB_PATH
 
-      - name: Check Liquibase version
-        run: liquibase --version
+      - name: Verify Liquibase Installation
+        run: |
+          export PATH="/opt/liquibase:$PATH"
+          liquibase --version
 
       - name: Validate changesets (DEV)
         run: |
-          liquibase \
-            --classpath=drivers/mysql-connector-j.jar \
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.DEV_JDBC_URL }}" \
+            --username="${{ secrets.DEV_DB_USER }}" \
+            --password="${{ secrets.DEV_DB_PASS }}" \
+            --log-level=info \
             validate
-        env:
-          LIQUIBASE_URL: ${{ secrets.DEV_JDBC_URL }}
-          LIQUIBASE_USERNAME: ${{ secrets.DEV_DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.DEV_DB_PASS }}
+
+      - name: Show Pending Changes (DEV)
+        run: |
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.DEV_JDBC_URL }}" \
+            --username="${{ secrets.DEV_DB_USER }}" \
+            --password="${{ secrets.DEV_DB_PASS }}" \
+            --log-level=info \
+            status --verbose
 
       - name: Deploy to DEV
         run: |
-          liquibase \
-            --classpath=drivers/mysql-connector-j.jar \
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.DEV_JDBC_URL }}" \
+            --username="${{ secrets.DEV_DB_USER }}" \
+            --password="${{ secrets.DEV_DB_PASS }}" \
+            --log-level=info \
             update
-        env:
-          LIQUIBASE_URL: ${{ secrets.DEV_JDBC_URL }}
-          LIQUIBASE_USERNAME: ${{ secrets.DEV_DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.DEV_DB_PASS }}
+
+      - name: Verify DEV Deployment
+        run: |
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.DEV_JDBC_URL }}" \
+            --username="${{ secrets.DEV_DB_USER }}" \
+            --password="${{ secrets.DEV_DB_PASS }}" \
+            --log-level=info \
+            history
 
   promote-to-qa:
     needs: liquibase-pipeline
@@ -72,38 +99,63 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Liquibase
-        run: |
-          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip -o liquibase-4.28.0.zip
-          sudo mv liquibase-4.28.0 /opt/liquibase
-          echo "/opt/liquibase" >> $GITHUB_PATH
-
       - name: Download MySQL JDBC Driver
         run: |
           mkdir -p drivers
-          curl -L -o drivers/mysql-connector-j.jar \
-            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.0.0/mysql-connector-j-9.0.0.jar
+          curl -L -o drivers/mysql-connector-j-9.4.0.jar \
+            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
+
+      - name: Install Liquibase
+        run: |
+          wget -q https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
+          unzip -q -o liquibase-4.28.0.zip -d liquibase-install
+          sudo mv liquibase-install /opt/liquibase
+          sudo chmod +x /opt/liquibase/liquibase
+          echo "/opt/liquibase" >> $GITHUB_PATH
 
       - name: Validate changesets (QA)
         run: |
-          liquibase \
-            --classpath=drivers/mysql-connector-j.jar \
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.QA_JDBC_URL }}" \
+            --username="${{ secrets.QA_DB_USER }}" \
+            --password="${{ secrets.QA_DB_PASS }}" \
+            --log-level=info \
             validate
-        env:
-          LIQUIBASE_URL: ${{ secrets.QA_JDBC_URL }}
-          LIQUIBASE_USERNAME: ${{ secrets.QA_DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.QA_DB_PASS }}
+
+      - name: Show Pending Changes (QA)
+        run: |
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.QA_JDBC_URL }}" \
+            --username="${{ secrets.QA_DB_USER }}" \
+            --password="${{ secrets.QA_DB_PASS }}" \
+            --log-level=info \
+            status --verbose
 
       - name: Deploy to QA
         run: |
-          liquibase \
-            --classpath=drivers/mysql-connector-j.jar \
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.QA_JDBC_URL }}" \
+            --username="${{ secrets.QA_DB_USER }}" \
+            --password="${{ secrets.QA_DB_PASS }}" \
+            --log-level=info \
             update
-        env:
-          LIQUIBASE_URL: ${{ secrets.QA_JDBC_URL }}
-          LIQUIBASE_USERNAME: ${{ secrets.QA_DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.QA_DB_PASS }}
+
+      - name: Verify QA Deployment
+        run: |
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.QA_JDBC_URL }}" \
+            --username="${{ secrets.QA_DB_USER }}" \
+            --password="${{ secrets.QA_DB_PASS }}" \
+            --log-level=info \
+            history
 
   promote-to-prod:
     needs: promote-to-qa
@@ -120,35 +172,71 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Liquibase
-        run: |
-          wget https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
-          unzip -o liquibase-4.28.0.zip
-          sudo mv liquibase-4.28.0 /opt/liquibase
-          echo "/opt/liquibase" >> $GITHUB_PATH
-
       - name: Download MySQL JDBC Driver
         run: |
           mkdir -p drivers
-          curl -L -o drivers/mysql-connector-j.jar \
-            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.0.0/mysql-connector-j-9.0.0.jar
+          curl -L -o drivers/mysql-connector-j-9.4.0.jar \
+            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
+
+      - name: Install Liquibase
+        run: |
+          wget -q https://github.com/liquibase/liquibase/releases/download/v4.28.0/liquibase-4.28.0.zip
+          unzip -q -o liquibase-4.28.0.zip -d liquibase-install
+          sudo mv liquibase-install /opt/liquibase
+          sudo chmod +x /opt/liquibase/liquibase
+          echo "/opt/liquibase" >> $GITHUB_PATH
 
       - name: Validate changesets (PROD)
         run: |
-          liquibase \
-            --classpath=drivers/mysql-connector-j.jar \
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.PROD_JDBC_URL }}" \
+            --username="${{ secrets.PROD_DB_USER }}" \
+            --password="${{ secrets.PROD_DB_PASS }}" \
+            --log-level=info \
             validate
-        env:
-          LIQUIBASE_URL: ${{ secrets.PROD_JDBC_URL }}
-          LIQUIBASE_USERNAME: ${{ secrets.PROD_DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.PROD_DB_PASS }}
+
+      - name: Show Pending Changes (PROD)
+        run: |
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.PROD_JDBC_URL }}" \
+            --username="${{ secrets.PROD_DB_USER }}" \
+            --password="${{ secrets.PROD_DB_PASS }}" \
+            --log-level=info \
+            status --verbose
 
       - name: Deploy to PROD
         run: |
-          liquibase \
-            --classpath=drivers/mysql-connector-j.jar \
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.PROD_JDBC_URL }}" \
+            --username="${{ secrets.PROD_DB_USER }}" \
+            --password="${{ secrets.PROD_DB_PASS }}" \
+            --log-level=info \
             update
-        env:
-          LIQUIBASE_URL: ${{ secrets.PROD_JDBC_URL }}
-          LIQUIBASE_USERNAME: ${{ secrets.PROD_DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.PROD_DB_PASS }}
+
+      - name: Verify PROD Deployment
+        run: |
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.PROD_JDBC_URL }}" \
+            --username="${{ secrets.PROD_DB_USER }}" \
+            --password="${{ secrets.PROD_DB_PASS }}" \
+            --log-level=info \
+            history
+
+      - name: Tag Production Release
+        run: |
+          /opt/liquibase/liquibase \
+            --changelog-file=liquibase/changelogs/db.changelog-master.xml \
+            --classpath=drivers/mysql-connector-j-9.4.0.jar \
+            --url="${{ secrets.PROD_JDBC_URL }}" \
+            --username="${{ secrets.PROD_DB_USER }}" \
+            --password="${{ secrets.PROD_DB_PASS }}" \
+            --log-level=info \
+            tag "prod-release-$(date +%Y%m%d-%H%M%S)"
