@@ -35,7 +35,7 @@ jobs:
     
     - name: Validate Changelog
       run: |
-        liquibase --changeLogFile=liquibase/changelogs/db.changelog-master.xml validate
+        liquibase --url=offline:mysql --changeLogFile=liquibase/changelogs/db.changelog-master.xml validate
 
   deploy-dev:
     name: Deploy to DEV
@@ -79,10 +79,12 @@ jobs:
     
     - name: Show Pending Changes
       run: |
+        cd $GITHUB_WORKSPACE
         liquibase --url=jdbc:mysql://localhost:3306/testdb_dev --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
     
     - name: Deploy to DEV Database
       run: |
+        cd $GITHUB_WORKSPACE
         liquibase --url=jdbc:mysql://localhost:3306/testdb_dev --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
     
     - name: Verify DEV Deployment
@@ -134,10 +136,12 @@ jobs:
     
     - name: Show Pending Changes
       run: |
+        cd $GITHUB_WORKSPACE
         liquibase --url=jdbc:mysql://localhost:3306/testdb_qa --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
     
     - name: Deploy to QA Database
       run: |
+        cd $GITHUB_WORKSPACE
         liquibase --url=jdbc:mysql://localhost:3306/testdb_qa --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
     
     - name: Verify QA Deployment
@@ -193,10 +197,12 @@ jobs:
     
     - name: Show Pending Changes
       run: |
+        cd $GITHUB_WORKSPACE
         liquibase --url=jdbc:mysql://localhost:3306/testdb_prod --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
     
     - name: Deploy to PROD Database
       run: |
+        cd $GITHUB_WORKSPACE
         liquibase --url=jdbc:mysql://localhost:3306/testdb_prod --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
     
     - name: Verify PROD Deployment
