@@ -20,11 +20,13 @@ jobs:
         distribution: 'temurin'
         java-version: '11'
     
-    - name: Download Liquibase
+    - name: Download and Setup Liquibase
       run: |
+        cd /tmp
         wget -q https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
         tar -xzf liquibase-4.23.0.tar.gz
         chmod +x liquibase
+        echo "/tmp" >> $GITHUB_PATH
     
     - name: Download MySQL Connector
       run: |
@@ -33,7 +35,7 @@ jobs:
     
     - name: Validate Changelog
       run: |
-        ./liquibase --changeLogFile=liquibase/changelogs/db.changelog-master.xml validate
+        liquibase --changeLogFile=liquibase/changelogs/db.changelog-master.xml validate
 
   deploy-dev:
     name: Deploy to DEV
@@ -62,11 +64,13 @@ jobs:
         mysql -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_dev.* TO '${{ secrets.DB_USERNAME }}'@'%';"
         mysql -u root -proot -e "FLUSH PRIVILEGES;"
     
-    - name: Download Liquibase
+    - name: Download and Setup Liquibase
       run: |
+        cd /tmp
         wget -q https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
         tar -xzf liquibase-4.23.0.tar.gz
         chmod +x liquibase
+        echo "/tmp" >> $GITHUB_PATH
     
     - name: Download MySQL Connector
       run: |
@@ -75,11 +79,11 @@ jobs:
     
     - name: Show Pending Changes
       run: |
-        ./liquibase --url=jdbc:mysql://localhost:3306/testdb_dev --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
+        liquibase --url=jdbc:mysql://localhost:3306/testdb_dev --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
     
     - name: Deploy to DEV Database
       run: |
-        ./liquibase --url=jdbc:mysql://localhost:3306/testdb_dev --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
+        liquibase --url=jdbc:mysql://localhost:3306/testdb_dev --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
     
     - name: Verify DEV Deployment
       run: |
@@ -115,11 +119,13 @@ jobs:
         mysql -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_qa.* TO '${{ secrets.DB_USERNAME }}'@'%';"
         mysql -u root -proot -e "FLUSH PRIVILEGES;"
     
-    - name: Download Liquibase
+    - name: Download and Setup Liquibase
       run: |
+        cd /tmp
         wget -q https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
         tar -xzf liquibase-4.23.0.tar.gz
         chmod +x liquibase
+        echo "/tmp" >> $GITHUB_PATH
     
     - name: Download MySQL Connector
       run: |
@@ -128,11 +134,11 @@ jobs:
     
     - name: Show Pending Changes
       run: |
-        ./liquibase --url=jdbc:mysql://localhost:3306/testdb_qa --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
+        liquibase --url=jdbc:mysql://localhost:3306/testdb_qa --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
     
     - name: Deploy to QA Database
       run: |
-        ./liquibase --url=jdbc:mysql://localhost:3306/testdb_qa --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
+        liquibase --url=jdbc:mysql://localhost:3306/testdb_qa --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
     
     - name: Verify QA Deployment
       run: |
@@ -168,11 +174,13 @@ jobs:
         mysql -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_prod.* TO '${{ secrets.DB_USERNAME }}'@'%';"
         mysql -u root -proot -e "FLUSH PRIVILEGES;"
     
-    - name: Download Liquibase
+    - name: Download and Setup Liquibase
       run: |
+        cd /tmp
         wget -q https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
         tar -xzf liquibase-4.23.0.tar.gz
         chmod +x liquibase
+        echo "/tmp" >> $GITHUB_PATH
     
     - name: Download MySQL Connector
       run: |
@@ -185,11 +193,11 @@ jobs:
     
     - name: Show Pending Changes
       run: |
-        ./liquibase --url=jdbc:mysql://localhost:3306/testdb_prod --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
+        liquibase --url=jdbc:mysql://localhost:3306/testdb_prod --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
     
     - name: Deploy to PROD Database
       run: |
-        ./liquibase --url=jdbc:mysql://localhost:3306/testdb_prod --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
+        liquibase --url=jdbc:mysql://localhost:3306/testdb_prod --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
     
     - name: Verify PROD Deployment
       run: |
