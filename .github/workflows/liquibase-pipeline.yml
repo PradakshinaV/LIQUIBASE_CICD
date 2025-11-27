@@ -6,9 +6,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ========================================
-  # STAGE 1: Validate Liquibase Changesets
-  # ========================================
   validate:
     name: Validate Changesets
     runs-on: ubuntu-latest
@@ -25,22 +22,19 @@ jobs:
     
     - name: Download Liquibase
       run: |
-        wget https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
+        wget -q https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
         tar -xzf liquibase-4.23.0.tar.gz
         chmod +x liquibase
     
     - name: Download MySQL Connector
       run: |
         mkdir -p liquibase/lib
-        wget -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
+        wget -q -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
     
     - name: Validate Changelog
       run: |
         ./liquibase --changeLogFile=liquibase/changelogs/db.changelog-master.xml validate
 
-  # ========================================
-  # STAGE 2: Deploy to DEV Environment
-  # ========================================
   deploy-dev:
     name: Deploy to DEV
     runs-on: ubuntu-latest
@@ -70,14 +64,14 @@ jobs:
     
     - name: Download Liquibase
       run: |
-        wget https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
+        wget -q https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
         tar -xzf liquibase-4.23.0.tar.gz
         chmod +x liquibase
     
     - name: Download MySQL Connector
       run: |
         mkdir -p liquibase/lib
-        wget -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
+        wget -q -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
     
     - name: Show Pending Changes
       run: |
@@ -92,9 +86,6 @@ jobs:
         mysql -u${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_dev -e "SHOW TABLES;"
         mysql -u${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_dev -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
 
-  # ========================================
-  # STAGE 3: Deploy to QA (Manual Approval)
-  # ========================================
   deploy-qa:
     name: Deploy to QA
     runs-on: ubuntu-latest
@@ -126,14 +117,14 @@ jobs:
     
     - name: Download Liquibase
       run: |
-        wget https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
+        wget -q https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
         tar -xzf liquibase-4.23.0.tar.gz
         chmod +x liquibase
     
     - name: Download MySQL Connector
       run: |
         mkdir -p liquibase/lib
-        wget -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
+        wget -q -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
     
     - name: Show Pending Changes
       run: |
@@ -148,9 +139,6 @@ jobs:
         mysql -u${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_qa -e "SHOW TABLES;"
         mysql -u${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_qa -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
 
-  # ========================================
-  # STAGE 4: Deploy to PROD (Manual Approval)
-  # ========================================
   deploy-prod:
     name: Deploy to PROD
     runs-on: ubuntu-latest
@@ -182,14 +170,14 @@ jobs:
     
     - name: Download Liquibase
       run: |
-        wget https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
+        wget -q https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
         tar -xzf liquibase-4.23.0.tar.gz
         chmod +x liquibase
     
     - name: Download MySQL Connector
       run: |
         mkdir -p liquibase/lib
-        wget -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
+        wget -q -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
     
     - name: Backup PROD Database
       run: |
