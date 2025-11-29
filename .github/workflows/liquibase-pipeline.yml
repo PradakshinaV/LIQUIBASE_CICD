@@ -56,13 +56,27 @@ jobs:
       uses: shogo82148/actions-setup-mysql@v1
       with:
         mysql-version: '8.0'
+        root-password: 'root'
+    
+    - name: Wait for MySQL to be ready
+      run: |
+        for i in {1..30}; do
+          if mysqladmin ping -h localhost -u root -proot --silent; then
+            echo "MySQL is ready"
+            break
+          fi
+          echo "Waiting for MySQL... ($i/30)"
+          sleep 2
+        done
     
     - name: Create DEV Database
       run: |
-        mysql -u root -proot -e "CREATE DATABASE IF NOT EXISTS testdb_dev;"
-        mysql -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'%' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
-        mysql -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_dev.* TO '${{ secrets.DB_USERNAME }}'@'%';"
-        mysql -u root -proot -e "FLUSH PRIVILEGES;"
+        mysql -h localhost -u root -proot -e "CREATE DATABASE IF NOT EXISTS testdb_dev;"
+        mysql -h localhost -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'localhost' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
+        mysql -h localhost -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'%' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
+        mysql -h localhost -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_dev.* TO '${{ secrets.DB_USERNAME }}'@'localhost';"
+        mysql -h localhost -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_dev.* TO '${{ secrets.DB_USERNAME }}'@'%';"
+        mysql -h localhost -u root -proot -e "FLUSH PRIVILEGES;"
     
     - name: Download and Setup Liquibase
       run: |
@@ -89,8 +103,8 @@ jobs:
     
     - name: Verify DEV Deployment
       run: |
-        mysql -u${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_dev -e "SHOW TABLES;"
-        mysql -u${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_dev -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
+        mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_dev -e "SHOW TABLES;"
+        mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_dev -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
 
   deploy-qa:
     name: Deploy to QA
@@ -113,13 +127,27 @@ jobs:
       uses: shogo82148/actions-setup-mysql@v1
       with:
         mysql-version: '8.0'
+        root-password: 'root'
+    
+    - name: Wait for MySQL to be ready
+      run: |
+        for i in {1..30}; do
+          if mysqladmin ping -h localhost -u root -proot --silent; then
+            echo "MySQL is ready"
+            break
+          fi
+          echo "Waiting for MySQL... ($i/30)"
+          sleep 2
+        done
     
     - name: Create QA Database
       run: |
-        mysql -u root -proot -e "CREATE DATABASE IF NOT EXISTS testdb_qa;"
-        mysql -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'%' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
-        mysql -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_qa.* TO '${{ secrets.DB_USERNAME }}'@'%';"
-        mysql -u root -proot -e "FLUSH PRIVILEGES;"
+        mysql -h localhost -u root -proot -e "CREATE DATABASE IF NOT EXISTS testdb_qa;"
+        mysql -h localhost -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'localhost' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
+        mysql -h localhost -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'%' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
+        mysql -h localhost -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_qa.* TO '${{ secrets.DB_USERNAME }}'@'localhost';"
+        mysql -h localhost -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_qa.* TO '${{ secrets.DB_USERNAME }}'@'%';"
+        mysql -h localhost -u root -proot -e "FLUSH PRIVILEGES;"
     
     - name: Download and Setup Liquibase
       run: |
@@ -146,8 +174,8 @@ jobs:
     
     - name: Verify QA Deployment
       run: |
-        mysql -u${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_qa -e "SHOW TABLES;"
-        mysql -u${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_qa -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
+        mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_qa -e "SHOW TABLES;"
+        mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_qa -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
 
   deploy-prod:
     name: Deploy to PROD
@@ -170,13 +198,27 @@ jobs:
       uses: shogo82148/actions-setup-mysql@v1
       with:
         mysql-version: '8.0'
+        root-password: 'root'
+    
+    - name: Wait for MySQL to be ready
+      run: |
+        for i in {1..30}; do
+          if mysqladmin ping -h localhost -u root -proot --silent; then
+            echo "MySQL is ready"
+            break
+          fi
+          echo "Waiting for MySQL... ($i/30)"
+          sleep 2
+        done
     
     - name: Create PROD Database
       run: |
-        mysql -u root -proot -e "CREATE DATABASE IF NOT EXISTS testdb_prod;"
-        mysql -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'%' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
-        mysql -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_prod.* TO '${{ secrets.DB_USERNAME }}'@'%';"
-        mysql -u root -proot -e "FLUSH PRIVILEGES;"
+        mysql -h localhost -u root -proot -e "CREATE DATABASE IF NOT EXISTS testdb_prod;"
+        mysql -h localhost -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'localhost' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
+        mysql -h localhost -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'%' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
+        mysql -h localhost -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_prod.* TO '${{ secrets.DB_USERNAME }}'@'localhost';"
+        mysql -h localhost -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_prod.* TO '${{ secrets.DB_USERNAME }}'@'%';"
+        mysql -h localhost -u root -proot -e "FLUSH PRIVILEGES;"
     
     - name: Download and Setup Liquibase
       run: |
@@ -193,7 +235,7 @@ jobs:
     
     - name: Backup PROD Database
       run: |
-        mysqldump -u${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod > prod_backup_$(date +%Y%m%d_%H%M%S).sql || echo "No tables to backup yet"
+        mysqldump -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod > prod_backup_$(date +%Y%m%d_%H%M%S).sql || echo "No tables to backup yet"
     
     - name: Show Pending Changes
       run: |
@@ -207,8 +249,8 @@ jobs:
     
     - name: Verify PROD Deployment
       run: |
-        mysql -u${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod -e "SHOW TABLES;"
-        mysql -u${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
+        mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod -e "SHOW TABLES;"
+        mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
     
     - name: Tag Production Release
       run: |
