@@ -33,40 +33,6 @@
             <dropColumn tableName="users" columnName="updated_at"/>
         </rollback>
     </changeSet>
-
-    <!-- ============================================ -->
-    <!-- INTENTIONAL FAILURE CHANGESET - FOR TESTING  -->
-    <!-- ============================================ -->
-    <!-- 
-    
-    ⚠️ TESTING AUTOMATIC ROLLBACK ⚠️
-    
-    This changeset is intentionally designed to FAIL.
-    It attempts to add a column to a table that doesn't exist.
-    
-    PURPOSE:
-    - Test automatic rollback in CI/CD pipeline
-    - Verify failure detection works
-    - Ensure database returns to previous state
-    
-    TO TEST AUTOMATIC ROLLBACK:
-    1. Uncomment the changeset below (remove the comment tags)
-    2. Save the file
-    3. Commit and push to GitHub:
-       git add liquibase/changelogs/v1.1/005-test-failure.xml
-       git commit -m "Test: Enable intentional failure to test rollback"
-       git push origin main
-    4. Go to GitHub → Actions
-    5. Watch the pipeline:
-       - Deployment will FAIL
-       - Automatic rollback will EXECUTE
-       - Database will remain unchanged
-    6. After testing, COMMENT IT BACK OUT to restore working pipeline
-    
-    ============================================
-    -->
-    
-    <!--
     <changeSet id="005-intentional-failure" author="admin">
         <comment>
             This changeset intentionally fails because 'non_existent_table' does not exist.
@@ -81,6 +47,6 @@
             <dropColumn tableName="non_existent_table" columnName="test_column"/>
         </rollback>
     </changeSet>
-    -->
+    
 
 </databaseChangeLog>
