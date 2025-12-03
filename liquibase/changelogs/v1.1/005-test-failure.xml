@@ -30,24 +30,7 @@
         </rollback>
     </changeSet>
 
-    <!-- 
-    ============================================
-    INTENTIONAL FAILURE CHANGESET - FOR TESTING ONLY
-    ============================================
-    
-    Uncomment the changeset below to test automatic rollback in CI/CD pipeline.
-    This changeset will FAIL because it tries to add a column to a non-existent table.
-    
-    TO TEST AUTOMATIC ROLLBACK:
-    1. Uncomment this changeset
-    2. Commit and push to GitHub
-    3. Watch the pipeline automatically rollback the failed deployment
-    4. Comment it back out after testing
-    
-    ============================================
-    -->
-    
-    <!--
+    <!-- INTENTIONAL FAILURE - UNCOMMENTED FOR TESTING -->
     <changeSet id="005-intentional-failure" author="admin">
         <addColumn tableName="non_existent_table">
             <column name="test_column" type="VARCHAR(50)"/>
@@ -56,6 +39,5 @@
             <dropColumn tableName="non_existent_table" columnName="test_column"/>
         </rollback>
     </changeSet>
-    -->
 
 </databaseChangeLog>
