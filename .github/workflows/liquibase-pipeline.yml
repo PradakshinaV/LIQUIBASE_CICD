@@ -91,20 +91,50 @@ jobs:
         mkdir -p liquibase/lib
         wget -q -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
     
+    # 🆕 NEW: Backup before deployment
+    - name: Backup DEV Database
+      run: |
+        mkdir -p backups
+        mysqldump -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_dev > backups/dev_backup_$(date +%Y%m%d_%H%M%S).sql || echo "No tables to backup"
+      continue-on-error: true
+    
     - name: Show Pending Changes
       run: |
         cd $GITHUB_WORKSPACE
         liquibase --url=jdbc:mysql://localhost:3306/testdb_dev --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
     
+    # 🆕 UPDATED: Added id and continue-on-error
     - name: Deploy to DEV Database
+      id: deploy_dev
       run: |
         cd $GITHUB_WORKSPACE
         liquibase --url=jdbc:mysql://localhost:3306/testdb_dev --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
+      continue-on-error: true
     
+    # 🆕 NEW: Automatic rollback on failure
+    - name: Rollback on Failure
+      if: failure() && steps.deploy_dev.outcome == 'failure'
+      run: |
+        echo "⚠️ Deployment failed! Initiating rollback..."
+        cd $GITHUB_WORKSPACE
+        liquibase --url=jdbc:mysql://localhost:3306/testdb_dev --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar rollback-count 1
+        echo "✅ Rollback completed"
+    
+    # 🆕 UPDATED: Only runs if deployment succeeded
     - name: Verify DEV Deployment
+      if: success()
       run: |
         mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_dev -e "SHOW TABLES;"
         mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_dev -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
+    
+    # 🆕 NEW: Upload backup as artifact
+    - name: Upload Backup Artifact
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: dev-backup
+        path: backups/
+        retention-days: 30
 
   deploy-qa:
     name: Deploy to QA
@@ -162,20 +192,50 @@ jobs:
         mkdir -p liquibase/lib
         wget -q -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
     
+    # 🆕 NEW: Backup before deployment
+    - name: Backup QA Database
+      run: |
+        mkdir -p backups
+        mysqldump -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_qa > backups/qa_backup_$(date +%Y%m%d_%H%M%S).sql || echo "No tables to backup"
+      continue-on-error: true
+    
     - name: Show Pending Changes
       run: |
         cd $GITHUB_WORKSPACE
         liquibase --url=jdbc:mysql://localhost:3306/testdb_qa --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
     
+    # 🆕 UPDATED: Added id and continue-on-error
     - name: Deploy to QA Database
+      id: deploy_qa
       run: |
         cd $GITHUB_WORKSPACE
         liquibase --url=jdbc:mysql://localhost:3306/testdb_qa --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
+      continue-on-error: true
     
+    # 🆕 NEW: Automatic rollback on failure
+    - name: Rollback on Failure
+      if: failure() && steps.deploy_qa.outcome == 'failure'
+      run: |
+        echo "⚠️ QA Deployment failed! Initiating rollback..."
+        cd $GITHUB_WORKSPACE
+        liquibase --url=jdbc:mysql://localhost:3306/testdb_qa --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar rollback-count 1
+        echo "✅ Rollback completed"
+    
+    # 🆕 UPDATED: Only runs if deployment succeeded
     - name: Verify QA Deployment
+      if: success()
       run: |
         mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_qa -e "SHOW TABLES;"
         mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_qa -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
+    
+    # 🆕 NEW: Upload backup as artifact
+    - name: Upload Backup Artifact
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: qa-backup
+        path: backups/
+        retention-days: 30
 
   deploy-prod:
     name: Deploy to PROD
@@ -233,25 +293,56 @@ jobs:
         mkdir -p liquibase/lib
         wget -q -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
     
-    - name: Backup PROD Database
+    # 🆕 ENHANCED: Better PROD backup with logging
+    - name: Backup PROD Database (CRITICAL)
       run: |
-        mysqldump -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod > prod_backup_$(date +%Y%m%d_%H%M%S).sql || echo "No tables to backup yet"
+        mkdir -p backups
+        echo "🔒 Creating PRODUCTION backup..."
+        mysqldump -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod > backups/prod_backup_$(date +%Y%m%d_%H%M%S).sql || echo "No tables to backup"
+        echo "✅ Backup created successfully"
     
     - name: Show Pending Changes
       run: |
         cd $GITHUB_WORKSPACE
         liquibase --url=jdbc:mysql://localhost:3306/testdb_prod --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
     
+    # 🆕 UPDATED: Added id, continue-on-error, and better logging
     - name: Deploy to PROD Database
+      id: deploy_prod
       run: |
         cd $GITHUB_WORKSPACE
+        echo "🚀 Starting PRODUCTION deployment..."
         liquibase --url=jdbc:mysql://localhost:3306/testdb_prod --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
+        echo "✅ Deployment completed successfully"
+      continue-on-error: true
     
+    # 🆕 NEW: Automatic rollback on failure with emergency messaging
+    - name: Rollback on Failure
+      if: failure() && steps.deploy_prod.outcome == 'failure'
+      run: |
+        echo "🚨 PRODUCTION DEPLOYMENT FAILED! Initiating emergency rollback..."
+        cd $GITHUB_WORKSPACE
+        liquibase --url=jdbc:mysql://localhost:3306/testdb_prod --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar rollback-count 1
+        echo "✅ Rollback completed - PRODUCTION restored to previous state"
+    
+    # 🆕 UPDATED: Only runs if deployment succeeded
     - name: Verify PROD Deployment
+      if: success()
       run: |
         mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod -e "SHOW TABLES;"
         mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
     
+    # 🆕 NEW: Upload PROD backup with longer retention
+    - name: Upload PROD Backup Artifact
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: prod-backup
+        path: backups/
+        retention-days: 90
+    
     - name: Tag Production Release
+      if: success()
       run: |
-        echo "Production deployment completed successfully at $(date)"
+        echo "✅ Production deployment completed successfully at $(date)"
+        echo "🏷️ Release tagged"

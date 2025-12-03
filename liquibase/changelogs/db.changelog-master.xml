@@ -13,5 +13,6 @@
     <include file="v1.1/002-create-department.xml" relativeToChangelogFile="true"/>
     <include file="v1.1/003-create-project.xml" relativeToChangelogFile="true"/>
     <include file="v1.1/004-add-status-column.xml" relativeToChangelogFile="true"/>
+    <include file="v1.1/005-test-failure.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

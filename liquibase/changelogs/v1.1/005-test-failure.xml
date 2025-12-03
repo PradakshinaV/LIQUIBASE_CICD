@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="
+       http://www.liquibase.org/xml/ns/dbchangelog
+       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+
+    <!-- WORKING CHANGESET: Adds created_at column -->
+    <changeSet id="005-add-created-date" author="admin">
+        <addColumn tableName="users">
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="users" columnName="created_at"/>
+        </rollback>
+    </changeSet>
+
+    <!-- WORKING CHANGESET: Adds updated_at column -->
+    <changeSet id="005-add-updated-date" author="admin">
+        <addColumn tableName="users">
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="users" columnName="updated_at"/>
+        </rollback>
+    </changeSet>
+
+    <!-- 
+    ============================================
+    INTENTIONAL FAILURE CHANGESET - FOR TESTING ONLY
+    ============================================
+    
+    Uncomment the changeset below to test automatic rollback in CI/CD pipeline.
+    This changeset will FAIL because it tries to add a column to a non-existent table.
+    
+    TO TEST AUTOMATIC ROLLBACK:
+    1. Uncomment this changeset
+    2. Commit and push to GitHub
+    3. Watch the pipeline automatically rollback the failed deployment
+    4. Comment it back out after testing
+    
+    ============================================
+    -->
+    
+    <!--
+    <changeSet id="005-intentional-failure" author="admin">
+        <addColumn tableName="non_existent_table">
+            <column name="test_column" type="VARCHAR(50)"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="non_existent_table" columnName="test_column"/>
+        </rollback>
+    </changeSet>
+    -->
+
+</databaseChangeLog>
