@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="
+       http://www.liquibase.org/xml/ns/dbchangelog
+       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+
+    <!-- ============================================ -->
+    <!-- Version 1.2: User Metadata & Activity        -->
+    <!-- ============================================ -->
+
+    <changeSet id="006-create-user-activity-table" author="admin">
+        <!-- PRECONDITIONS: Ensure users table exists -->
+        <preConditions onFail="HALT" onFailMessage="Users table must exist before creating user_activity table">
+            <tableExists tableName="users"/>
+        </preConditions>
+        
+        <comment>
+            Creates user_activity table to track user login history and activity
+        </comment>
+        
+        <createTable tableName="user_activity">
+            <column name="activity_id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="activity_type" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="activity_timestamp" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ip_address" type="VARCHAR(45)"/>
+            <column name="user_agent" type="VARCHAR(255)"/>
+        </createTable>
+        
+        <addForeignKeyConstraint
+            baseTableName="user_activity"
+            baseColumnNames="user_id"
+            referencedTableName="users"
+            referencedColumnNames="id"
+            constraintName="fk_activity_user"
+            onDelete="CASCADE"/>
+        
+        <createIndex indexName="idx_activity_user_id" tableName="user_activity">
+            <column name="user_id"/>
+        </createIndex>
+        
+        <createIndex indexName="idx_activity_timestamp" tableName="user_activity">
+            <column name="activity_timestamp"/>
+        </createIndex>
+        
+        <rollback>
+            <dropTable tableName="user_activity"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="006-add-last-login-to-users" author="admin">
+        <!-- PRECONDITIONS: Multiple checks -->
+        <preConditions onFail="HALT">
+            <!-- Table must exist -->
+            <tableExists tableName="users"/>
+            
+            <!-- Column must not already exist -->
+            <not>
+                <columnExists tableName="users" columnName="last_login"/>
+            </not>
+            
+            <!-- Ensure there are some users (optional check) -->
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM users WHERE id IS NULL
+            </sqlCheck>
+        </preConditions>
+        
+        <comment>
+            Adds last_login timestamp to track when user last accessed the system
+        </comment>
+        
+        <addColumn tableName="users">
+            <column name="last_login" type="TIMESTAMP" defaultValue="NULL">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        
+        <rollback>
+            <dropColumn tableName="users" columnName="last_login"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="006-add-account-status-check" author="admin">
+        <!-- PRECONDITION: status column must exist -->
+        <preConditions onFail="HALT" onFailMessage="Status column must exist in users table">
+            <columnExists tableName="users" columnName="status"/>
+        </preConditions>
+        
+        <comment>
+            Adds check constraint to ensure status has valid values
+        </comment>
+        
+        <sql>
+            ALTER TABLE users 
+            ADD CONSTRAINT chk_user_status 
+            CHECK (status IN ('active', 'inactive', 'suspended', 'deleted'))
+        </sql>
+        
+        <rollback>
+            <sql>
+                ALTER TABLE users DROP CONSTRAINT chk_user_status
+            </sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="006-add-email-verification" author="admin">
+        <!-- PRECONDITION: Check database version supports boolean -->
+        <preConditions onFail="MARK_RAN" onFailMessage="Database must support boolean type">
+            <dbms type="mysql"/>
+        </preConditions>
+        
+        <comment>
+            Adds email_verified flag to track email verification status
+        </comment>
+        
+        <addColumn tableName="users">
+            <column name="email_verified" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        
+        <rollback>
+            <dropColumn tableName="users" columnName="email_verified"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

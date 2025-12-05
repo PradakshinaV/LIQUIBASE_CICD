@@ -14,5 +14,8 @@
     <include file="v1.1/003-create-project.xml" relativeToChangelogFile="true"/>
     <include file="v1.1/004-add-status-column.xml" relativeToChangelogFile="true"/>
     <include file="v1.1/005-test-failure.xml" relativeToChangelogFile="true"/>
+    
+    <!-- Version 1.2 - User Metadata & Activity -->
+    <include file="v1.2/006-add-user-metadata.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
