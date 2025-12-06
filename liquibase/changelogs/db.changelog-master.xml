@@ -18,4 +18,8 @@
     <!-- Version 1.2 - User Metadata & Activity -->
     <include file="v1.2/006-add-user-metadata.xml" relativeToChangelogFile="true"/>
 
+    <!-- Version 1.3 -->
+<include file="v1.3/007-add-phone-to-users.xml" relativeToChangelogFile="true"/>
+
+
 </databaseChangeLog>

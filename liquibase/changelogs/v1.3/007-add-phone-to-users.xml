@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="
+       http://www.liquibase.org/xml/ns/dbchangelog
+       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+
+    <changeSet id="007-add-phone-to-users" author="admin">
+        <preConditions onFail="HALT">
+            <tableExists tableName="users"/>
+            <not>
+                <columnExists tableName="users" columnName="phone"/>
+            </not>
+        </preConditions>
+
+        <comment>Adds a phone number column to the users table</comment>
+
+        <addColumn tableName="users">
+            <column name="phone" type="VARCHAR(20)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <rollback>
+            <dropColumn tableName="users" columnName="phone"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
