@@ -260,6 +260,7 @@ jobs:
         mysql-version: '8.0'
         root-password: 'root'
     
+    
     - name: Wait for MySQL to be ready
       run: |
         for i in {1..30}; do
