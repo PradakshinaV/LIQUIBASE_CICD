@@ -4,347 +4,56 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Liquibase Migration Dashboard</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .header {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            margin-bottom: 30px;
-        }
-
-        .header h1 {
-            color: #333;
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            color: #666;
-            font-size: 1.1em;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-5px);
-        }
-
-        .stat-label {
-            color: #888;
-            font-size: 0.9em;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .stat-value {
-            color: #333;
-            font-size: 2em;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-
-        .stat-subtitle {
-            color: #666;
-            font-size: 0.85em;
-        }
-
-        .environments-section {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            margin-bottom: 30px;
-        }
-
-        .section-title {
-            font-size: 1.8em;
-            color: #333;
-            margin-bottom: 25px;
-            padding-bottom: 15px;
-            border-bottom: 3px solid #667eea;
-        }
-
-        .env-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 25px;
-        }
-
-        .env-card {
-            border: 2px solid #e0e0e0;
-            border-radius: 12px;
-            padding: 25px;
-            background: #f8f9fa;
-            transition: all 0.3s ease;
-        }
-
-        .env-card:hover {
-            border-color: #667eea;
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
-        }
-
-        .env-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .env-name {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #333;
-        }
-
-        .status-badge {
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
-        .status-healthy {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .status-warning {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .status-error {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .env-info {
-            margin-bottom: 15px;
-        }
-
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #dee2e6;
-        }
-
-        .info-label {
-            color: #666;
-            font-weight: 500;
-        }
-
-        .info-value {
-            color: #333;
-            font-weight: bold;
-        }
-
-        .version-badge {
-            background: #667eea;
-            color: white;
-            padding: 5px 12px;
-            border-radius: 15px;
-            font-size: 0.9em;
-        }
-
-        .timeline-section {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            margin-bottom: 30px;
-        }
-
-        .timeline {
-            position: relative;
-            padding: 20px 0;
-        }
-
-        .timeline-item {
-            display: flex;
-            margin-bottom: 25px;
-            position: relative;
-            padding-left: 50px;
-        }
-
-        .timeline-item::before {
-            content: '';
-            position: absolute;
-            left: 15px;
-            top: 0;
-            bottom: -25px;
-            width: 2px;
-            background: #e0e0e0;
-        }
-
-        .timeline-item:last-child::before {
-            display: none;
-        }
-
-        .timeline-marker {
-            position: absolute;
-            left: 0;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            background: #667eea;
-            border: 4px solid white;
-            box-shadow: 0 0 0 2px #667eea;
-        }
-
-        .timeline-content {
-            flex: 1;
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            border-left: 4px solid #667eea;
-        }
-
-        .timeline-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
-        }
-
-        .timeline-title {
-            font-weight: bold;
-            color: #333;
-            font-size: 1.1em;
-        }
-
-        .timeline-time {
-            color: #888;
-            font-size: 0.9em;
-        }
-
-        .timeline-desc {
-            color: #666;
-            margin-top: 8px;
-        }
-
-        .actions-section {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-
-        .actions-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-        }
-
-        .action-button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            border: none;
-            border-radius: 10px;
-            font-size: 1.1em;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-align: center;
-        }
-
-        .action-button:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-        }
-
-        .action-button.secondary {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        }
-
-        .action-button.warning {
-            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-        }
-
-        .refresh-info {
-            text-align: center;
-            color: white;
-            margin-top: 20px;
-            font-size: 0.9em;
-        }
-
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-    </style>
+    <link rel="stylesheet" href="index.css">
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <h1>🗄️ Liquibase Migration Dashboard</h1>
-            <p>Monitor and manage database schema changes across all environments</p>
+            <div class="header-left">
+                <h1>🗄️ Liquibase Migration Dashboard</h1>
+                <p>Monitor and manage database schema changes across all environments</p>
+            </div>
+            <div class="header-right">
+                <div id="connectionStatus" class="connection-status disconnected">
+                    <span class="status-dot red"></span>
+                    <span>Disconnected</span>
+                </div>
+                <button class="refresh-btn" onclick="refreshAllData()" id="refreshBtn">
+                    <span>🔄</span>
+                    <span>Refresh</span>
+                </button>
+            </div>
         </div>
 
         <!-- Statistics Cards -->
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-label">Total Changesets</div>
-                <div class="stat-value" id="totalChangesets">12</div>
+                <div class="stat-value" id="totalChangesets">
+                    <span class="loading-spinner"></span>
+                </div>
                 <div class="stat-subtitle">Across all versions</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Environments</div>
-                <div class="stat-value">3</div>
-                <div class="stat-subtitle">DEV • QA • PROD</div>
+                <div class="stat-value" id="healthyEnvs">
+                    <span class="loading-spinner"></span>
+                </div>
+                <div class="stat-subtitle">Healthy / Total</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Last Deployment</div>
-                <div class="stat-value" id="lastDeploy">2 hrs</div>
-                <div class="stat-subtitle">ago to PROD</div>
+                <div class="stat-value" id="lastDeploy">
+                    <span class="loading-spinner"></span>
+                </div>
+                <div class="stat-subtitle" id="lastDeployEnv">Loading...</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Success Rate</div>
-                <div class="stat-value">98%</div>
+                <div class="stat-value" id="successRate">
+                    <span class="loading-spinner"></span>
+                </div>
                 <div class="stat-subtitle">Last 30 days</div>
             </div>
         </div>
@@ -352,150 +61,16 @@
         <!-- Environment Status -->
         <div class="environments-section">
             <h2 class="section-title">📊 Environment Status</h2>
-            <div class="env-grid">
-                <!-- DEV Environment -->
-                <div class="env-card">
-                    <div class="env-header">
-                        <div class="env-name">🔧 DEVELOPMENT</div>
-                        <span class="status-badge status-healthy">● Healthy</span>
-                    </div>
-                    <div class="env-info">
-                        <div class="info-row">
-                            <span class="info-label">Current Version</span>
-                            <span class="version-badge">v1.3</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Changesets Applied</span>
-                            <span class="info-value">12</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Last Updated</span>
-                            <span class="info-value">2 hours ago</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Database</span>
-                            <span class="info-value">testdb_dev</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- QA Environment -->
-                <div class="env-card">
-                    <div class="env-header">
-                        <div class="env-name">🧪 QA</div>
-                        <span class="status-badge status-healthy">● Healthy</span>
-                    </div>
-                    <div class="env-info">
-                        <div class="info-row">
-                            <span class="info-label">Current Version</span>
-                            <span class="version-badge">v1.3</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Changesets Applied</span>
-                            <span class="info-value">12</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Last Updated</span>
-                            <span class="info-value">3 hours ago</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Database</span>
-                            <span class="info-value">testdb_qa</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- PROD Environment -->
-                <div class="env-card">
-                    <div class="env-header">
-                        <div class="env-name">🚀 PRODUCTION</div>
-                        <span class="status-badge status-healthy">● Healthy</span>
-                    </div>
-                    <div class="env-info">
-                        <div class="info-row">
-                            <span class="info-label">Current Version</span>
-                            <span class="version-badge">v1.3</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Changesets Applied</span>
-                            <span class="info-value">12</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Last Updated</span>
-                            <span class="info-value">5 hours ago</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Database</span>
-                            <span class="info-value">testdb_prod</span>
-                        </div>
-                    </div>
-                </div>
+            <div class="env-grid" id="envGrid">
+                <div class="loading-spinner" style="margin: 50px auto;"></div>
             </div>
         </div>
 
         <!-- Migration Timeline -->
         <div class="timeline-section">
             <h2 class="section-title">📅 Recent Migration History</h2>
-            <div class="timeline">
-                <div class="timeline-item">
-                    <div class="timeline-marker"></div>
-                    <div class="timeline-content">
-                        <div class="timeline-header">
-                            <span class="timeline-title">v1.3 - Add Phone Column</span>
-                            <span class="timeline-time">2 hours ago</span>
-                        </div>
-                        <div class="timeline-desc">
-                            <strong>DEV:</strong> Added phone column to users table<br>
-                            <strong>Author:</strong> admin<br>
-                            <strong>Status:</strong> ✅ Success
-                        </div>
-                    </div>
-                </div>
-
-                <div class="timeline-item">
-                    <div class="timeline-marker"></div>
-                    <div class="timeline-content">
-                        <div class="timeline-header">
-                            <span class="timeline-title">v1.2 - User Metadata & Activity</span>
-                            <span class="timeline-time">1 day ago</span>
-                        </div>
-                        <div class="timeline-desc">
-                            <strong>PROD:</strong> Deployed user activity tracking features<br>
-                            <strong>Author:</strong> admin<br>
-                            <strong>Status:</strong> ✅ Success
-                        </div>
-                    </div>
-                </div>
-
-                <div class="timeline-item">
-                    <div class="timeline-marker"></div>
-                    <div class="timeline-content">
-                        <div class="timeline-header">
-                            <span class="timeline-title">v1.1 - Additional Tables</span>
-                            <span class="timeline-time">3 days ago</span>
-                        </div>
-                        <div class="timeline-desc">
-                            <strong>ALL:</strong> Created department and project tables<br>
-                            <strong>Author:</strong> DevA, DevB<br>
-                            <strong>Status:</strong> ✅ Success
-                        </div>
-                    </div>
-                </div>
-
-                <div class="timeline-item">
-                    <div class="timeline-marker"></div>
-                    <div class="timeline-content">
-                        <div class="timeline-header">
-                            <span class="timeline-title">v1.0 - Initial Schema</span>
-                            <span class="timeline-time">1 week ago</span>
-                        </div>
-                        <div class="timeline-desc">
-                            <strong>ALL:</strong> Initial database schema with users and roles<br>
-                            <strong>Author:</strong> admin<br>
-                            <strong>Status:</strong> ✅ Success
-                        </div>
-                    </div>
-                </div>
+            <div class="timeline" id="timeline">
+                <div class="loading-spinner" style="margin: 50px auto;"></div>
             </div>
         </div>
 
@@ -503,47 +78,589 @@
         <div class="actions-section">
             <h2 class="section-title">⚡ Quick Actions</h2>
             <div class="actions-grid">
-                <button class="action-button" onclick="alert('Feature available in backend integration')">
-                    🔍 View Pending Changes
-                </button>
-                <button class="action-button" onclick="alert('Feature available in backend integration')">
-                    📊 Compare Environments
-                </button>
-                <button class="action-button secondary" onclick="alert('Feature available in backend integration')">
-                    🔄 Sync DEV → QA
-                </button>
-                <button class="action-button warning" onclick="alert('Feature available in backend integration')">
-                    ⏮️ Rollback Last Change
+                <button class="action-button" onclick="viewHistory('dev')">🔍 View DEV History</button>
+                <button class="action-button" onclick="compareEnvironments()">📊 Compare Environments</button>
+                <button class="action-button secondary" onclick="viewHistory('qa')">🧪 View QA History</button>
+                <button class="action-button secondary" onclick="viewHistory('prod')">🚀 View PROD History</button>
+            </div>
+
+            <!-- Rollback Section -->
+            <div class="rollback-section" style="display: none;" id="rollbackSection">
+                <div class="rollback-warning">
+                    ⚠️ DANGER ZONE: Database Rollback
+                </div>
+                <p style="color: #856404; margin-bottom: 15px;">
+                    This will undo the last database changes. This action cannot be undone automatically.
+                </p>
+                <div class="rollback-controls">
+                    <label style="font-weight: 600;">Environment:</label>
+                    <select id="rollbackEnv" class="filter-select">
+                        <option value="dev">DEV</option>
+                        <option value="qa">QA</option>
+                        <option value="prod">PROD</option>
+                    </select>
+                    
+                    <label style="font-weight: 600;">Changesets to rollback:</label>
+                    <input type="number" id="rollbackCount" class="rollback-input" value="1" min="1" max="10">
+                    
+                    <button class="rollback-btn" onclick="initiateRollback()">
+                        ⏮️ Rollback
+                    </button>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; text-align: center;">
+                <button class="action-button warning" onclick="toggleRollbackSection()">
+                    ⏮️ Show Rollback Options
                 </button>
             </div>
         </div>
+    </div>
 
-        <div class="refresh-info">
-            💡 This is a static mockup. Next steps: Tasks 19-21 will add backend API integration
+    <!-- Rollback Confirmation Dialog - OUTSIDE container -->
+    <div id="rollbackConfirm" class="confirm-dialog" style="display: none;">
+        <h3>⚠️ Confirm Rollback</h3>
+        <div id="rollbackConfirmText"></div>
+        <div class="confirm-buttons">
+            <button class="confirm-yes" onclick="executeRollback()">Yes, Rollback</button>
+            <button class="confirm-no" onclick="cancelRollback()">Cancel</button>
         </div>
     </div>
 
+    <!-- History Modal -->
+    <div class="modal" id="historyModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Migration History</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+
+            <div class="search-filter-section">
+                <input type="text" id="historySearch" class="search-box"
+                       placeholder="🔍 Search by ID, author, or description..." oninput="filterHistory()">
+                <select id="historyFilter" class="filter-select" onchange="filterHistory()">
+                    <option value="all">All Types</option>
+                    <option value="EXECUTED">Executed</option>
+                    <option value="RERAN">Re-ran</option>
+                    <option value="ROLLBACK">Rollback</option>
+                </select>
+            </div>
+
+            <div id="modalBody">
+                <div class="loading-spinner"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compare Modal -->
+    <div class="modal" id="compareModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Environment Comparison</h2>
+                <button class="close-btn" onclick="closeCompareModal()">&times;</button>
+            </div>
+            <div id="compareBody">
+                <div class="loading-spinner"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Liquibase CI/CD Dashboard | Last updated: <span id="lastUpdateTime">Never</span></p>
+    </div>
+
     <script>
-        // Simulate real-time updates
-        function updateLastDeploy() {
-            const deployTime = document.getElementById('lastDeploy');
-            let hours = 2;
-            let minutes = 0;
-            
-            setInterval(() => {
-                minutes += 1;
-                if (minutes >= 60) {
-                    hours += 1;
-                    minutes = 0;
-                }
-                deployTime.textContent = `${hours}h ${minutes}m`;
-            }, 60000); // Update every minute
+        const API_BASE = 'http://localhost:3000/api';
+        let environmentsData = [];
+        let autoRefreshInterval = null;
+        let currentHistoryData = [];
+        let rollbackEnvSelected = 'dev';
+        let rollbackCountSelected = 1;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Dashboard initialized');
+            refreshAllData();
+            startAutoRefresh();
+        });
+
+        function startAutoRefresh() {
+            autoRefreshInterval = setInterval(() => {
+                refreshAllData();
+            }, 30000);
         }
 
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            updateLastDeploy();
-        });
+        async function refreshAllData() {
+            const btn = document.getElementById('refreshBtn');
+            btn.disabled = true;
+            
+            try {
+                await Promise.all([
+                    loadEnvironments(),
+                    loadStats(),
+                    loadHistory()
+                ]);
+                
+                updateConnectionStatus(true);
+                document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
+            } catch (error) {
+                console.error('Error refreshing data:', error);
+                updateConnectionStatus(false);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connectionStatus');
+            if (connected) {
+                statusEl.className = 'connection-status connected';
+                statusEl.innerHTML = '<span class="status-dot green"></span><span>Connected</span>';
+            } else {
+                statusEl.className = 'connection-status disconnected';
+                statusEl.innerHTML = '<span class="status-dot red"></span><span>Disconnected</span>';
+            }
+        }
+
+        async function loadEnvironments() {
+            try {
+                const response = await fetch(`${API_BASE}/environments`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    environmentsData = data.environments;
+                    renderEnvironments(data.environments);
+                }
+            } catch (error) {
+                console.error('Error loading environments:', error);
+                document.getElementById('envGrid').innerHTML = 
+                    '<div class="error-message">Failed to load environment data</div>';
+            }
+        }
+
+        function renderEnvironments(environments) {
+            const grid = document.getElementById('envGrid');
+            grid.innerHTML = '';
+
+            const icons = { dev: '🔧', qa: '🧪', prod: '🚀' };
+            const names = { dev: 'DEVELOPMENT', qa: 'QA', prod: 'PRODUCTION' };
+
+            environments.forEach(env => {
+                const card = document.createElement('div');
+                card.className = 'env-card';
+                
+                const statusClass = env.status === 'healthy' ? 'status-healthy' : 'status-error';
+                const statusText = env.status === 'healthy' ? '● Healthy' : '● Error';
+                
+                const lastUpdated = env.lastUpdated 
+                    ? formatTimeAgo(new Date(env.lastUpdated))
+                    : 'Never';
+
+                card.innerHTML = `
+                    <div class="env-header">
+                        <div class="env-name">${icons[env.environment]} ${names[env.environment]}</div>
+                        <span class="status-badge ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="env-info">
+                        <div class="info-row">
+                            <span class="info-label">Current Version</span>
+                            <span class="version-badge">${env.currentVersion || 'N/A'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Changesets Applied</span>
+                            <span class="info-value">${env.changesetsApplied || 0}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Last Updated</span>
+                            <span class="info-value">${lastUpdated}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Database</span>
+                            <span class="info-value">${env.database || 'N/A'}</span>
+                        </div>
+                    </div>
+                `;
+                
+                grid.appendChild(card);
+            });
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/stats`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const stats = data.stats;
+                    
+                    document.getElementById('totalChangesets').textContent = stats.totalChangesets;
+                    document.getElementById('healthyEnvs').textContent = 
+                        `${stats.healthyEnvironments} / ${stats.totalEnvironments}`;
+                    document.getElementById('successRate').textContent = `${stats.successRate}%`;
+                    
+                    if (stats.lastDeployment) {
+                        document.getElementById('lastDeploy').textContent = stats.lastDeployment.formatted;
+                        document.getElementById('lastDeployEnv').textContent = 'to PROD';
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        async function loadHistory() {
+            try {
+                const response = await fetch(`${API_BASE}/migrations/history?env=dev&limit=5`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderTimeline(data.history);
+                }
+            } catch (error) {
+                console.error('Error loading history:', error);
+                document.getElementById('timeline').innerHTML = 
+                    '<div class="error-message">Failed to load migration history</div>';
+            }
+        }
+
+        function renderTimeline(history) {
+            const timeline = document.getElementById('timeline');
+            timeline.innerHTML = '';
+
+            if (!history || history.length === 0) {
+                timeline.innerHTML = '<p style="text-align:center;color:#666;">No migration history available</p>';
+                return;
+            }
+
+            history.forEach(item => {
+                const timelineItem = document.createElement('div');
+                timelineItem.className = 'timeline-item';
+                
+                const timeAgo = formatTimeAgo(new Date(item.DATEEXECUTED));
+                
+                timelineItem.innerHTML = `
+                    <div class="timeline-marker"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-header">
+                            <span class="timeline-title">${item.ID}</span>
+                            <span class="timeline-time">${timeAgo}</span>
+                        </div>
+                        <div class="timeline-desc">
+                            <strong>Author:</strong> ${item.AUTHOR}<br>
+                            <strong>Description:</strong> ${item.DESCRIPTION || 'No description'}<br>
+                            <strong>File:</strong> ${item.FILENAME}<br>
+                            <strong>Status:</strong> ✅ ${item.EXECTYPE}
+                        </div>
+                    </div>
+                `;
+                
+                timeline.appendChild(timelineItem);
+            });
+        }
+
+        async function viewHistory(env) {
+            const modal = document.getElementById('historyModal');
+            const modalBody = document.getElementById('modalBody');
+            const modalTitle = document.getElementById('modalTitle');
+            
+            const envNames = { dev: 'DEV', qa: 'QA', prod: 'PROD' };
+            modalTitle.textContent = `${envNames[env]} Migration History`;
+            
+            modal.classList.add('show');
+            modalBody.innerHTML = '<div class="loading-spinner"></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/migrations/history?env=${env}&limit=50`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentHistoryData = data.history;
+                    renderHistoryItems(data.history);
+                } else {
+                    modalBody.innerHTML = '<div class="error-message">Failed to load history</div>';
+                }
+            } catch (error) {
+                console.error('Error loading history:', error);
+                modalBody.innerHTML = '<div class="error-message">Error loading history: ' + error.message + '</div>';
+            }
+        }
+
+        function renderHistoryItems(history) {
+            const modalBody = document.getElementById('modalBody');
+            let html = '';
+            
+            if (history.length === 0) {
+                html = '<p style="text-align:center;color:#666;">No migration history found</p>';
+            } else {
+                history.forEach(item => {
+                    const execTypeBadge = item.EXECTYPE === 'EXECUTED' ? 'badge-success' : 
+                                        item.EXECTYPE === 'RERAN' ? 'badge-warning' : 
+                                        'badge-info';
+                    
+                    html += `
+                        <div class="history-item">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                                <h4>${item.ID}</h4>
+                                <span class="badge ${execTypeBadge}">${item.EXECTYPE}</span>
+                            </div>
+                            <p><strong>Author:</strong> ${item.AUTHOR}</p>
+                            <p><strong>Executed:</strong> ${new Date(item.DATEEXECUTED).toLocaleString()}</p>
+                            <p><strong>Description:</strong> ${item.DESCRIPTION || 'No description'}</p>
+                            <p><strong>File:</strong> ${item.FILENAME}</p>
+                            <p><strong>Order:</strong> #${item.ORDEREXECUTED}</p>
+                        </div>
+                    `;
+                });
+            }
+            
+            modalBody.innerHTML = html;
+        }
+
+        function filterHistory() {
+            const searchTerm = document.getElementById('historySearch').value.toLowerCase();
+            const filterType = document.getElementById('historyFilter').value;
+            
+            let filtered = currentHistoryData;
+            
+            if (filterType !== 'all') {
+                filtered = filtered.filter(item => item.EXECTYPE === filterType);
+            }
+            
+            if (searchTerm) {
+                filtered = filtered.filter(item => 
+                    item.ID.toLowerCase().includes(searchTerm) ||
+                    item.AUTHOR.toLowerCase().includes(searchTerm) ||
+                    (item.DESCRIPTION && item.DESCRIPTION.toLowerCase().includes(searchTerm)) ||
+                    item.FILENAME.toLowerCase().includes(searchTerm)
+                );
+            }
+            
+            renderHistoryItems(filtered);
+        }
+
+        async function compareEnvironments() {
+            const modal = document.getElementById('compareModal');
+            const compareBody = document.getElementById('compareBody');
+            
+            modal.classList.add('show');
+            compareBody.innerHTML = '<div class="loading-spinner"></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/migrations/diff?env1=dev&env2=prod`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    let html = '<h3>Schema Comparison: DEV vs PROD</h3>';
+                    
+                    html += `
+                        <div style="margin: 20px 0;">
+                            <p><strong>DEV:</strong> ${data.environment1.totalChangesets} changesets</p>
+                            <p><strong>PROD:</strong> ${data.environment2.totalChangesets} changesets</p>
+                        </div>
+                    `;
+                    
+                    if (data.differences.identical) {
+                        html += '<div class="success-message">✅ Environments are identical</div>';
+                    } else {
+                        if (data.differences.onlyIn.dev.length > 0) {
+                            html += '<h4 style="color:#667eea;margin-top:20px;">Only in DEV:</h4>';
+                            html += '<ul>';
+                            data.differences.onlyIn.dev.forEach(id => {
+                                html += `<li>${id}</li>`;
+                            });
+                            html += '</ul>';
+                        }
+                        
+                        if (data.differences.onlyIn.prod.length > 0) {
+                            html += '<h4 style="color:#667eea;margin-top:20px;">Only in PROD:</h4>';
+                            html += '<ul>';
+                            data.differences.onlyIn.prod.forEach(id => {
+                                html += `<li>${id}</li>`;
+                            });
+                            html += '</ul>';
+                        }
+                    }
+                    
+                    compareBody.innerHTML = html;
+                } else {
+                    compareBody.innerHTML = '<div class="error-message">Failed to compare environments</div>';
+                }
+            } catch (error) {
+                console.error('Error comparing environments:', error);
+                compareBody.innerHTML = '<div class="error-message">Error: ' + error.message + '</div>';
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('historyModal').classList.remove('show');
+        }
+
+        function closeCompareModal() {
+            document.getElementById('compareModal').classList.remove('show');
+        }
+
+        window.onclick = function(event) {
+            const historyModal = document.getElementById('historyModal');
+            const compareModal = document.getElementById('compareModal');
+            
+            if (event.target === historyModal) {
+                closeModal();
+            }
+            if (event.target === compareModal) {
+                closeCompareModal();
+            }
+        }
+
+        function formatTimeAgo(date) {
+            const seconds = Math.floor((new Date() - date) / 1000);
+            
+            const intervals = {
+                year: 31536000,
+                month: 2592000,
+                week: 604800,
+                day: 86400,
+                hour: 3600,
+                minute: 60
+            };
+            
+            for (const [unit, secondsInUnit] of Object.entries(intervals)) {
+                const interval = Math.floor(seconds / secondsInUnit);
+                if (interval >= 1) {
+                    return `${interval} ${unit}${interval > 1 ? 's' : ''} ago`;
+                }
+            }
+            
+            return 'Just now';
+        }
+
+        // ===== ROLLBACK FUNCTIONS - FINAL FIXED VERSION =====
+
+        function toggleRollbackSection() {
+            const section = document.getElementById('rollbackSection');
+            const confirmDialog = document.getElementById('rollbackConfirm');
+            
+            if (section.style.display === 'none') {
+                section.style.display = 'block';
+                if (confirmDialog) confirmDialog.style.display = 'none';
+            } else {
+                section.style.display = 'none';
+                if (confirmDialog) confirmDialog.style.display = 'none';
+            }
+        }
+
+        function initiateRollback() {
+            const env = document.getElementById('rollbackEnv').value;
+            const count = parseInt(document.getElementById('rollbackCount').value);
+            
+            console.log('Initiating rollback:', { env, count });
+            
+            rollbackEnvSelected = env;
+            rollbackCountSelected = count;
+            
+            const confirmDialog = document.getElementById('rollbackConfirm');
+            const confirmText = document.getElementById('rollbackConfirmText');
+            
+            if (!confirmDialog || !confirmText) {
+                console.error('ERROR: Confirmation dialog elements not found!');
+                alert('Error: Confirmation dialog not found. Please refresh the page.');
+                return;
+            }
+            
+            const envNames = { dev: 'DEVELOPMENT', qa: 'QA', prod: 'PRODUCTION' };
+            
+            let html = `
+                <p>You are about to rollback <strong>${count}</strong> changeset(s) 
+                from <strong>${envNames[env]}</strong> environment.</p>
+            `;
+            
+            if (env === 'prod') {
+                html += `
+                    <div class="prod-warning">
+                        ⚠️ WARNING: This is PRODUCTION!
+                    </div>
+                `;
+            }
+            
+            html += `<p>This action will undo database changes. Are you absolutely sure?</p>`;
+            
+            confirmText.innerHTML = html;
+            confirmDialog.style.display = 'block';
+            confirmDialog.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        async function executeRollback() {
+            const confirmDialog = document.getElementById('rollbackConfirm');
+            if (!confirmDialog) return;
+            
+            confirmDialog.innerHTML = '<div class="loading-spinner" style="margin: 20px auto;"></div><p style="text-align:center;">Executing rollback...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/migrations/rollback`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        env: rollbackEnvSelected,
+                        count: rollbackCountSelected
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    const simulationBadge = data.simulation ? 
+                        '<span class="badge badge-warning">SIMULATION MODE</span>' : 
+                        '<span class="badge badge-success">EXECUTED</span>';
+                    
+                    confirmDialog.innerHTML = `
+                        <div class="success-message">
+                            <h3>✅ Rollback ${data.simulation ? 'Simulation' : 'Execution'} Complete</h3>
+                            ${simulationBadge}
+                            <p style="margin-top: 15px;"><strong>Environment:</strong> ${data.environment.toUpperCase()}</p>
+                            <p><strong>Changesets rolled back:</strong> ${data.changesetsRolledBack}</p>
+                            <p><strong>Command executed:</strong></p>
+                            <code style="display: block; background: #f4f4f4; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 0.85em; word-wrap: break-word;">
+                            ${data.command}
+                            </code>
+                            ${data.simulation ? 
+                                '<p style="color: #856404;"><strong>Note:</strong> This was a simulation. To enable real rollback, update backend configuration.</p>' : 
+                                '<p style="color: #155724;"><strong>Success!</strong> Database has been rolled back.</p>'
+                            }
+                            <button class="confirm-no" onclick="closeRollbackSection()" style="margin-top: 15px;">Close</button>
+                        </div>
+                    `;
+                    
+                    setTimeout(() => refreshAllData(), 2000);
+                } else {
+                    throw new Error(data.error || 'Rollback failed');
+                }
+                
+            } catch (error) {
+                confirmDialog.innerHTML = `
+                    <div class="error-message">
+                        <h3>❌ Rollback Failed</h3>
+                        <p>${error.message}</p>
+                        <button class="confirm-no" onclick="cancelRollback()">Close</button>
+                    </div>
+                `;
+            }
+        }
+
+        function cancelRollback() {
+            const confirmDialog = document.getElementById('rollbackConfirm');
+            const confirmText = document.getElementById('rollbackConfirmText');
+            
+            if (confirmDialog) confirmDialog.style.display = 'none';
+            if (confirmText) confirmText.innerHTML = '';
+        }
+
+        function closeRollbackSection() {
+            const section = document.getElementById('rollbackSection');
+            const confirmDialog = document.getElementById('rollbackConfirm');
+            const confirmText = document.getElementById('rollbackConfirmText');
+            
+            if (section) section.style.display = 'none';
+            if (confirmDialog) confirmDialog.style.display = 'none';
+            if (confirmText) confirmText.innerHTML = '';
+        }
     </script>
 </body>
 </html>

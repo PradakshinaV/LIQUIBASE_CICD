@@ -366,6 +366,74 @@ app.get('/api/stats', async (req, res) => {
     }
 });
 
+// 7. POST /api/migrations/rollback - Execute rollback (simulation or real)
+app.post('/api/migrations/rollback', async (req, res) => {
+    const { env, count } = req.body;
+    
+    if (!env || !count) {
+        return res.status(400).json({
+            success: false,
+            error: 'Environment and count are required'
+        });
+    }
+
+    if (!['dev', 'qa', 'prod'].includes(env)) {
+        return res.status(400).json({
+            success: false,
+            error: 'Invalid environment'
+        });
+    }
+
+    try {
+        // For safety, we'll return a simulation response
+        // In production, you would execute the actual Liquibase command
+        
+        const envNames = { dev: 'DEV', qa: 'QA', prod: 'PROD' };
+        const command = `liquibase --defaults-file=liquibase.${env}.properties rollback-count ${count}`;
+        
+        // SIMULATION MODE - doesn't actually execute
+        // To enable real execution, uncomment the code below and comment out the simulation
+        
+        res.json({
+            success: true,
+            message: `Rollback simulation complete for ${envNames[env]}`,
+            simulation: true,
+            command: command,
+            environment: env,
+            changesetsRolledBack: count,
+            note: 'This is a simulation. To enable real rollback, configure backend with proper authorization.'
+        });
+
+        /* REAL EXECUTION CODE (UNCOMMENT TO ENABLE):
+        const { exec } = require('child_process');
+        const util = require('util');
+        const execPromise = util.promisify(exec);
+        
+        // Execute rollback command
+        const { stdout, stderr } = await execPromise(command, {
+            cwd: 'C:/LIQUIBASE_CICD/liquibase'
+        });
+        
+        res.json({
+            success: true,
+            message: `Successfully rolled back ${count} changeset(s) in ${envNames[env]}`,
+            simulation: false,
+            command: command,
+            environment: env,
+            changesetsRolledBack: count,
+            output: stdout
+        });
+        */
+        
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            environment: env
+        });
+    }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: 'Liquibase API Server is running' });
@@ -376,9 +444,9 @@ app.listen(PORT, () => {
     console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
-║     🗄️  Liquibase API Server Running                      ║
+║     🗄️  Liquibase API Server Running                       ║
 ║                                                            ║
-║     Port: ${PORT}                                            ║
+║     Port: ${PORT}                                          ║
 ║     Environment: ${process.env.NODE_ENV || 'development'}                              ║
 ║                                                            ║
 ║     Available Endpoints:                                   ║
@@ -388,6 +456,7 @@ app.listen(PORT, () => {
 ║     • GET  /api/database/status?env=dev                    ║
 ║     • GET  /api/migrations/diff?env1=dev&env2=prod         ║
 ║     • GET  /api/stats                                      ║
+║     • POST /api/migrations/rollback                        ║
 ║     • GET  /health                                         ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
