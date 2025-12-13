@@ -1,349 +1,173 @@
-name: Database Migration Pipeline
+name: Liquibase Migration Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ test-validation ]
   workflow_dispatch:
 
 jobs:
-  validate:
-    name: Validate Changesets
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
-    
-    - name: Set up Java
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '11'
-    
-    - name: Download and Setup Liquibase
-      run: |
-        cd /tmp
-        wget -q https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
-        tar -xzf liquibase-4.23.0.tar.gz
-        chmod +x liquibase
-        echo "/tmp" >> $GITHUB_PATH
-    
-    - name: Download MySQL Connector
-      run: |
-        mkdir -p liquibase/lib
-        wget -q -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
-    
-    - name: Validate Changelog
-      run: |
-        liquibase --url=offline:mysql --changeLogFile=liquibase/changelogs/db.changelog-master.xml validate
-
+# =====================================================
+# DEV
+# =====================================================
   deploy-dev:
     name: Deploy to DEV
     runs-on: ubuntu-latest
-    needs: validate
-    
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
-    
-    - name: Set up Java
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '11'
-    
-    - name: Set up MySQL
-      uses: shogo82148/actions-setup-mysql@v1
-      with:
-        mysql-version: '8.0'
-        root-password: 'root'
-    
-    - name: Wait for MySQL to be ready
-      run: |
-        for i in {1..30}; do
-          if mysqladmin ping -h localhost -u root -proot --silent; then
-            echo "MySQL is ready"
-            break
-          fi
-          echo "Waiting for MySQL... ($i/30)"
-          sleep 2
-        done
-    
-    - name: Create DEV Database
-      run: |
-        mysql -h localhost -u root -proot -e "CREATE DATABASE IF NOT EXISTS testdb_dev;"
-        mysql -h localhost -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'localhost' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
-        mysql -h localhost -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'%' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
-        mysql -h localhost -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_dev.* TO '${{ secrets.DB_USERNAME }}'@'localhost';"
-        mysql -h localhost -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_dev.* TO '${{ secrets.DB_USERNAME }}'@'%';"
-        mysql -h localhost -u root -proot -e "FLUSH PRIVILEGES;"
-    
-    - name: Download and Setup Liquibase
-      run: |
-        cd /tmp
-        wget -q https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
-        tar -xzf liquibase-4.23.0.tar.gz
-        chmod +x liquibase
-        echo "/tmp" >> $GITHUB_PATH
-    
-    - name: Download MySQL Connector
-      run: |
-        mkdir -p liquibase/lib
-        wget -q -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
-    
-    # 🆕 NEW: Backup before deployment
-    - name: Backup DEV Database
-      run: |
-        mkdir -p backups
-        mysqldump -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_dev > backups/dev_backup_$(date +%Y%m%d_%H%M%S).sql || echo "No tables to backup"
-      continue-on-error: true
-    
-    - name: Show Pending Changes
-      run: |
-        cd $GITHUB_WORKSPACE
-        liquibase --url=jdbc:mysql://localhost:3306/testdb_dev --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
-    
-    # 🆕 UPDATED: Added id and continue-on-error
-    - name: Deploy to DEV Database
-      id: deploy_dev
-      run: |
-        cd $GITHUB_WORKSPACE
-        liquibase --url=jdbc:mysql://localhost:3306/testdb_dev --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
-      continue-on-error: true
-    
-    # 🆕 NEW: Automatic rollback on failure
-    - name: Rollback on Failure
-      if: failure() && steps.deploy_dev.outcome == 'failure'
-      run: |
-        echo "⚠️ Deployment failed! Initiating rollback..."
-        cd $GITHUB_WORKSPACE
-        liquibase --url=jdbc:mysql://localhost:3306/testdb_dev --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar rollback-count 1
-        echo "✅ Rollback completed"
-    
-    # 🆕 UPDATED: Only runs if deployment succeeded
-    - name: Verify DEV Deployment
-      if: success()
-      run: |
-        mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_dev -e "SHOW TABLES;"
-        mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_dev -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
-    
-    # 🆕 NEW: Upload backup as artifact
-    - name: Upload Backup Artifact
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: dev-backup
-        path: backups/
-        retention-days: 30
 
-  deploy-qa:
-    name: Deploy to QA
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: testdb_dev
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Liquibase
+        run: |
+          curl -sLo liquibase.zip https://github.com/liquibase/liquibase/releases/download/v4.33.0/liquibase-4.33.0.zip
+          unzip -q liquibase.zip -d $HOME/liquibase
+          chmod +x $HOME/liquibase/liquibase
+          echo "$HOME/liquibase" >> $GITHUB_PATH
+
+      - name: Install MySQL Connector
+        run: |
+          mkdir -p $HOME/liquibase/lib
+          curl -sLo $HOME/liquibase/lib/mysql.jar \
+          https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.1.0/mysql-connector-j-9.1.0.jar
+
+      - name: Wait for MySQL
+        run: |
+          for i in {1..30}; do
+            mysqladmin ping -h 127.0.0.1 -uroot -proot && break
+            sleep 2
+          done
+
+      - name: Validate Changelog
+        run: |
+          liquibase \
+            --url="jdbc:mysql://127.0.0.1:3306/testdb_dev" \
+            --username=root \
+            --password=root \
+            --changeLogFile=backend/changelogs/master-changelog.xml \
+            --searchPath=backend/changelogs \
+            validate
+
+      - name: Deploy to DEV
+        run: |
+          liquibase \
+            --url="jdbc:mysql://127.0.0.1:3306/testdb_dev" \
+            --username=root \
+            --password=root \
+            --changeLogFile=backend/changelogs/master-changelog.xml \
+            --searchPath=backend/changelogs \
+            update
+
+# =====================================================
+# QA
+# =====================================================
+  promote-qa:
+    name: Promote to QA
     runs-on: ubuntu-latest
     needs: deploy-dev
-    environment: 
-      name: QA
-    
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
-    
-    - name: Set up Java
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '11'
-    
-    - name: Set up MySQL
-      uses: shogo82148/actions-setup-mysql@v1
-      with:
-        mysql-version: '8.0'
-        root-password: 'root'
-    
-    - name: Wait for MySQL to be ready
-      run: |
-        for i in {1..30}; do
-          if mysqladmin ping -h localhost -u root -proot --silent; then
-            echo "MySQL is ready"
-            break
-          fi
-          echo "Waiting for MySQL... ($i/30)"
-          sleep 2
-        done
-    
-    - name: Create QA Database
-      run: |
-        mysql -h localhost -u root -proot -e "CREATE DATABASE IF NOT EXISTS testdb_qa;"
-        mysql -h localhost -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'localhost' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
-        mysql -h localhost -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'%' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
-        mysql -h localhost -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_qa.* TO '${{ secrets.DB_USERNAME }}'@'localhost';"
-        mysql -h localhost -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_qa.* TO '${{ secrets.DB_USERNAME }}'@'%';"
-        mysql -h localhost -u root -proot -e "FLUSH PRIVILEGES;"
-    
-    - name: Download and Setup Liquibase
-      run: |
-        cd /tmp
-        wget -q https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
-        tar -xzf liquibase-4.23.0.tar.gz
-        chmod +x liquibase
-        echo "/tmp" >> $GITHUB_PATH
-    
-    - name: Download MySQL Connector
-      run: |
-        mkdir -p liquibase/lib
-        wget -q -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
-    
-    # 🆕 NEW: Backup before deployment
-    - name: Backup QA Database
-      run: |
-        mkdir -p backups
-        mysqldump -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_qa > backups/qa_backup_$(date +%Y%m%d_%H%M%S).sql || echo "No tables to backup"
-      continue-on-error: true
-    
-    - name: Show Pending Changes
-      run: |
-        cd $GITHUB_WORKSPACE
-        liquibase --url=jdbc:mysql://localhost:3306/testdb_qa --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
-    
-    # 🆕 UPDATED: Added id and continue-on-error
-    - name: Deploy to QA Database
-      id: deploy_qa
-      run: |
-        cd $GITHUB_WORKSPACE
-        liquibase --url=jdbc:mysql://localhost:3306/testdb_qa --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
-      continue-on-error: true
-    
-    # 🆕 NEW: Automatic rollback on failure
-    - name: Rollback on Failure
-      if: failure() && steps.deploy_qa.outcome == 'failure'
-      run: |
-        echo "⚠️ QA Deployment failed! Initiating rollback..."
-        cd $GITHUB_WORKSPACE
-        liquibase --url=jdbc:mysql://localhost:3306/testdb_qa --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar rollback-count 1
-        echo "✅ Rollback completed"
-    
-    # 🆕 UPDATED: Only runs if deployment succeeded
-    - name: Verify QA Deployment
-      if: success()
-      run: |
-        mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_qa -e "SHOW TABLES;"
-        mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_qa -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
-    
-    # 🆕 NEW: Upload backup as artifact
-    - name: Upload Backup Artifact
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: qa-backup
-        path: backups/
-        retention-days: 30
+    environment: qa
 
-  deploy-prod:
-    name: Deploy to PROD
-    runs-on: ubuntu-latest
-    needs: deploy-qa
-    environment: 
-      name: PRODUCTION
-    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: testdb_qa
+        ports:
+          - 3306:3306
+
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
-    
-    - name: Set up Java
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '11'
-    
-    - name: Set up MySQL
-      uses: shogo82148/actions-setup-mysql@v1
-      with:
-        mysql-version: '8.0'
-        root-password: 'root'
-    
-    
-    - name: Wait for MySQL to be ready
-      run: |
-        for i in {1..30}; do
-          if mysqladmin ping -h localhost -u root -proot --silent; then
-            echo "MySQL is ready"
-            break
-          fi
-          echo "Waiting for MySQL... ($i/30)"
-          sleep 2
-        done
-    
-    - name: Create PROD Database
-      run: |
-        mysql -h localhost -u root -proot -e "CREATE DATABASE IF NOT EXISTS testdb_prod;"
-        mysql -h localhost -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'localhost' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
-        mysql -h localhost -u root -proot -e "CREATE USER IF NOT EXISTS '${{ secrets.DB_USERNAME }}'@'%' IDENTIFIED BY '${{ secrets.DB_PASSWORD }}';"
-        mysql -h localhost -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_prod.* TO '${{ secrets.DB_USERNAME }}'@'localhost';"
-        mysql -h localhost -u root -proot -e "GRANT ALL PRIVILEGES ON testdb_prod.* TO '${{ secrets.DB_USERNAME }}'@'%';"
-        mysql -h localhost -u root -proot -e "FLUSH PRIVILEGES;"
-    
-    - name: Download and Setup Liquibase
-      run: |
-        cd /tmp
-        wget -q https://github.com/liquibase/liquibase/releases/download/v4.23.0/liquibase-4.23.0.tar.gz
-        tar -xzf liquibase-4.23.0.tar.gz
-        chmod +x liquibase
-        echo "/tmp" >> $GITHUB_PATH
-    
-    - name: Download MySQL Connector
-      run: |
-        mkdir -p liquibase/lib
-        wget -q -O liquibase/lib/mysql-connector-j-9.4.0.jar https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.4.0/mysql-connector-j-9.4.0.jar
-    
-    # 🆕 ENHANCED: Better PROD backup with logging
-    - name: Backup PROD Database (CRITICAL)
-      run: |
-        mkdir -p backups
-        echo "🔒 Creating PRODUCTION backup..."
-        mysqldump -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod > backups/prod_backup_$(date +%Y%m%d_%H%M%S).sql || echo "No tables to backup"
-        echo "✅ Backup created successfully"
-    
-    - name: Show Pending Changes
-      run: |
-        cd $GITHUB_WORKSPACE
-        liquibase --url=jdbc:mysql://localhost:3306/testdb_prod --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar status
-    
-    # 🆕 UPDATED: Added id, continue-on-error, and better logging
-    - name: Deploy to PROD Database
-      id: deploy_prod
-      run: |
-        cd $GITHUB_WORKSPACE
-        echo "🚀 Starting PRODUCTION deployment..."
-        liquibase --url=jdbc:mysql://localhost:3306/testdb_prod --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar update
-        echo "✅ Deployment completed successfully"
-      continue-on-error: true
-    
-    # 🆕 NEW: Automatic rollback on failure with emergency messaging
-    - name: Rollback on Failure
-      if: failure() && steps.deploy_prod.outcome == 'failure'
-      run: |
-        echo "🚨 PRODUCTION DEPLOYMENT FAILED! Initiating emergency rollback..."
-        cd $GITHUB_WORKSPACE
-        liquibase --url=jdbc:mysql://localhost:3306/testdb_prod --username=${{ secrets.DB_USERNAME }} --password=${{ secrets.DB_PASSWORD }} --changeLogFile=liquibase/changelogs/db.changelog-master.xml --classpath=liquibase/lib/mysql-connector-j-9.4.0.jar rollback-count 1
-        echo "✅ Rollback completed - PRODUCTION restored to previous state"
-    
-    # 🆕 UPDATED: Only runs if deployment succeeded
-    - name: Verify PROD Deployment
-      if: success()
-      run: |
-        mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod -e "SHOW TABLES;"
-        mysql -h localhost -u ${{ secrets.DB_USERNAME }} -p${{ secrets.DB_PASSWORD }} testdb_prod -e "SELECT ID, AUTHOR, FILENAME, DATEEXECUTED FROM DATABASECHANGELOG ORDER BY DATEEXECUTED DESC LIMIT 5;"
-    
-    # 🆕 NEW: Upload PROD backup with longer retention
-    - name: Upload PROD Backup Artifact
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: prod-backup
-        path: backups/
-        retention-days: 90
-    
-    - name: Tag Production Release
-      if: success()
-      run: |
-        echo "✅ Production deployment completed successfully at $(date)"
-        echo "🏷️ Release tagged"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Liquibase
+        run: |
+          curl -sLo liquibase.zip https://github.com/liquibase/liquibase/releases/download/v4.33.0/liquibase-4.33.0.zip
+          unzip -q liquibase.zip -d $HOME/liquibase
+          chmod +x $HOME/liquibase/liquibase
+          echo "$HOME/liquibase" >> $GITHUB_PATH
+
+      - name: Install MySQL Connector
+        run: |
+          mkdir -p $HOME/liquibase/lib
+          curl -sLo $HOME/liquibase/lib/mysql.jar \
+          https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.1.0/mysql-connector-j-9.1.0.jar
+
+      - name: Deploy to QA
+        run: |
+          liquibase \
+            --url="jdbc:mysql://127.0.0.1:3306/testdb_qa" \
+            --username=root \
+            --password=root \
+            --changeLogFile=backend/changelogs/master-changelog.xml \
+            --searchPath=backend/changelogs \
+            update
+
+# =====================================================
+# PROD
+# =====================================================
+  promote-prod:
+    name: Promote to PROD
+    runs-on: ubuntu-latest
+    needs: promote-qa
+    environment: prod
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: testdb_prod
+        ports:
+          - 3306:3306
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Liquibase
+        run: |
+          curl -sLo liquibase.zip https://github.com/liquibase/liquibase/releases/download/v4.33.0/liquibase-4.33.0.zip
+          unzip -q liquibase.zip -d $HOME/liquibase
+          chmod +x $HOME/liquibase/liquibase
+          echo "$HOME/liquibase" >> $GITHUB_PATH
+
+      - name: Install MySQL Connector
+        run: |
+          mkdir -p $HOME/liquibase/lib
+          curl -sLo $HOME/liquibase/lib/mysql.jar \
+          https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.1.0/mysql-connector-j-9.1.0.jar
+
+      - name: Deploy to PROD
+        run: |
+          liquibase \
+            --url="jdbc:mysql://127.0.0.1:3306/testdb_prod" \
+            --username=root \
+            --password=root \
+            --changeLogFile=backend/changelogs/master-changelog.xml \
+            --searchPath=backend/changelogs \
+            update
