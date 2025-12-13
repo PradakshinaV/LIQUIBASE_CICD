@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Database connection pools for all environments
+// Database connection pools
 const pools = {
     dev: mysql.createPool({
         host: process.env.DB_HOST || 'localhost',
@@ -46,7 +46,6 @@ async function getDatabaseInfo(pool, envName) {
     try {
         const connection = await pool.getConnection();
         
-        // Get current version (latest changeset)
         const [changesets] = await connection.query(`
             SELECT ID, AUTHOR, FILENAME, DATEEXECUTED, DESCRIPTION, ORDEREXECUTED
             FROM DATABASECHANGELOG 
@@ -54,12 +53,10 @@ async function getDatabaseInfo(pool, envName) {
             LIMIT 1
         `);
 
-        // Get total changeset count
         const [countResult] = await connection.query(`
             SELECT COUNT(*) as total FROM DATABASECHANGELOG
         `);
 
-        // Get database name
         const [dbName] = await connection.query(`SELECT DATABASE() as dbname`);
 
         connection.release();
@@ -93,17 +90,14 @@ async function getDatabaseInfo(pool, envName) {
     }
 }
 
-// Helper function to extract version from changeset ID
 function extractVersion(changesetId) {
     if (!changesetId) return 'v1.0';
     
-    // Extract version patterns like "v1-1", "001", "006-add-user", etc.
     const versionMatch = changesetId.match(/v?(\d+)[.-](\d+)/i);
     if (versionMatch) {
         return `v${versionMatch[1]}.${versionMatch[2]}`;
     }
     
-    // Try to extract just version number
     const numMatch = changesetId.match(/^(\d+)/);
     if (numMatch) {
         const num = parseInt(numMatch[1]);
@@ -115,9 +109,10 @@ function extractVersion(changesetId) {
     return 'v1.0';
 }
 
-// API Routes
+// ============================================
+// EXISTING ENDPOINTS
+// ============================================
 
-// 1. GET /api/environments - Get all environment statuses
 app.get('/api/environments', async (req, res) => {
     try {
         const [devInfo, qaInfo, prodInfo] = await Promise.all([
@@ -138,7 +133,6 @@ app.get('/api/environments', async (req, res) => {
     }
 });
 
-// 2. GET /api/migrations/history - Get migration history for an environment
 app.get('/api/migrations/history', async (req, res) => {
     const env = req.query.env || 'dev';
     const limit = parseInt(req.query.limit) || 10;
@@ -154,18 +148,9 @@ app.get('/api/migrations/history', async (req, res) => {
 
         const [changesets] = await pool.query(`
             SELECT 
-                ID,
-                AUTHOR,
-                FILENAME,
-                DATEEXECUTED,
-                ORDEREXECUTED,
-                EXECTYPE,
-                MD5SUM,
-                DESCRIPTION,
-                COMMENTS,
-                TAG,
-                LIQUIBASE,
-                DEPLOYMENT_ID
+                ID, AUTHOR, FILENAME, DATEEXECUTED, ORDEREXECUTED,
+                EXECTYPE, MD5SUM, DESCRIPTION, COMMENTS, TAG,
+                LIQUIBASE, DEPLOYMENT_ID
             FROM DATABASECHANGELOG 
             ORDER BY DATEEXECUTED DESC 
             LIMIT ?
@@ -185,34 +170,11 @@ app.get('/api/migrations/history', async (req, res) => {
     }
 });
 
-// 3. GET /api/migrations/pending - Check for pending migrations (placeholder)
-app.get('/api/migrations/pending', async (req, res) => {
-    const env = req.query.env || 'dev';
-    
-    try {
-        // In a real implementation, this would compare changelog files with database
-        // For now, we'll return a mock response
-        res.json({
-            success: true,
-            environment: env,
-            pendingChangesets: [],
-            message: 'No pending changesets. Database is up to date.'
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// 4. GET /api/database/status - Check database connection status
 app.get('/api/database/status', async (req, res) => {
     const env = req.query.env;
 
     try {
         if (env) {
-            // Check specific environment
             const pool = pools[env];
             if (!pool) {
                 return res.status(400).json({
@@ -231,7 +193,6 @@ app.get('/api/database/status', async (req, res) => {
                 status: 'connected'
             });
         } else {
-            // Check all environments
             const statuses = await Promise.all(
                 Object.entries(pools).map(async ([name, pool]) => {
                     try {
@@ -258,7 +219,6 @@ app.get('/api/database/status', async (req, res) => {
     }
 });
 
-// 5. GET /api/migrations/diff - Compare schemas between environments
 app.get('/api/migrations/diff', async (req, res) => {
     const env1 = req.query.env1 || 'dev';
     const env2 = req.query.env2 || 'prod';
@@ -314,7 +274,6 @@ app.get('/api/migrations/diff', async (req, res) => {
     }
 });
 
-// 6. GET /api/stats - Get overall statistics
 app.get('/api/stats', async (req, res) => {
     try {
         const [devInfo, qaInfo, prodInfo] = await Promise.all([
@@ -323,7 +282,6 @@ app.get('/api/stats', async (req, res) => {
             getDatabaseInfo(pools.prod, 'prod')
         ]);
 
-        // Calculate statistics
         const totalChangesets = Math.max(
             devInfo.changesetsApplied,
             qaInfo.changesetsApplied,
@@ -332,7 +290,6 @@ app.get('/api/stats', async (req, res) => {
 
         const healthyEnvs = [devInfo, qaInfo, prodInfo].filter(e => e.status === 'healthy').length;
 
-        // Get latest deployment time
         const deployments = [devInfo, qaInfo, prodInfo]
             .filter(e => e.lastUpdated)
             .map(e => new Date(e.lastUpdated))
@@ -355,7 +312,7 @@ app.get('/api/stats', async (req, res) => {
                     minutesAgo,
                     formatted: `${hoursAgo}h ${minutesAgo}m ago`
                 },
-                successRate: 98 // Mock for now - would calculate from deployment history
+                successRate: 98
             }
         });
     } catch (error) {
@@ -366,7 +323,6 @@ app.get('/api/stats', async (req, res) => {
     }
 });
 
-// 7. POST /api/migrations/rollback - Execute rollback (simulation or real)
 app.post('/api/migrations/rollback', async (req, res) => {
     const { env, count } = req.body;
     
@@ -385,14 +341,8 @@ app.post('/api/migrations/rollback', async (req, res) => {
     }
 
     try {
-        // For safety, we'll return a simulation response
-        // In production, you would execute the actual Liquibase command
-        
         const envNames = { dev: 'DEV', qa: 'QA', prod: 'PROD' };
         const command = `liquibase --defaults-file=liquibase.${env}.properties rollback-count ${count}`;
-        
-        // SIMULATION MODE - doesn't actually execute
-        // To enable real execution, uncomment the code below and comment out the simulation
         
         res.json({
             success: true,
@@ -403,27 +353,6 @@ app.post('/api/migrations/rollback', async (req, res) => {
             changesetsRolledBack: count,
             note: 'This is a simulation. To enable real rollback, configure backend with proper authorization.'
         });
-
-        /* REAL EXECUTION CODE (UNCOMMENT TO ENABLE):
-        const { exec } = require('child_process');
-        const util = require('util');
-        const execPromise = util.promisify(exec);
-        
-        // Execute rollback command
-        const { stdout, stderr } = await execPromise(command, {
-            cwd: 'C:/LIQUIBASE_CICD/liquibase'
-        });
-        
-        res.json({
-            success: true,
-            message: `Successfully rolled back ${count} changeset(s) in ${envNames[env]}`,
-            simulation: false,
-            command: command,
-            environment: env,
-            changesetsRolledBack: count,
-            output: stdout
-        });
-        */
         
     } catch (error) {
         res.status(500).json({
@@ -434,7 +363,312 @@ app.post('/api/migrations/rollback', async (req, res) => {
     }
 });
 
-// Health check endpoint
+// ============================================
+// NEW TASK 22: MONITORING ENDPOINTS
+// ============================================
+
+// 🆕 GET /api/monitoring/execution-times - Track execution times
+app.get('/api/monitoring/execution-times', async (req, res) => {
+    const env = req.query.env || 'dev';
+    const limit = parseInt(req.query.limit) || 20;
+
+    try {
+        const pool = pools[env];
+        if (!pool) {
+            return res.status(400).json({ success: false, error: 'Invalid environment' });
+        }
+
+        // Get changesets with their execution order and timestamps
+        const [changesets] = await pool.query(`
+            SELECT 
+                ID,
+                AUTHOR,
+                DATEEXECUTED,
+                ORDEREXECUTED,
+                DESCRIPTION,
+                EXECTYPE
+            FROM DATABASECHANGELOG 
+            ORDER BY ORDEREXECUTED DESC
+            LIMIT ?
+        `, [limit]);
+
+        // Calculate estimated execution times (time between consecutive changesets)
+        const executionData = changesets.map((changeset, index) => {
+            let executionTimeSeconds = 0;
+            
+            if (index < changesets.length - 1) {
+                const currentTime = new Date(changeset.DATEEXECUTED).getTime();
+                const nextTime = new Date(changesets[index + 1].DATEEXECUTED).getTime();
+                executionTimeSeconds = Math.abs(currentTime - nextTime) / 1000;
+            } else {
+                executionTimeSeconds = 2; // Default for last changeset
+            }
+
+            return {
+                id: changeset.ID,
+                author: changeset.AUTHOR,
+                executedAt: changeset.DATEEXECUTED,
+                executionTimeSeconds: Math.round(executionTimeSeconds * 100) / 100,
+                description: changeset.DESCRIPTION,
+                execType: changeset.EXECTYPE
+            };
+        });
+
+        const avgExecutionTime = executionData.reduce((sum, item) => sum + item.executionTimeSeconds, 0) / executionData.length;
+
+        res.json({
+            success: true,
+            environment: env,
+            count: executionData.length,
+            averageExecutionTime: Math.round(avgExecutionTime * 100) / 100,
+            executions: executionData
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// 🆕 GET /api/monitoring/author-stats - Track who made changes
+app.get('/api/monitoring/author-stats', async (req, res) => {
+    const env = req.query.env || 'all';
+
+    try {
+        let authorStats = [];
+
+        if (env === 'all') {
+            // Aggregate from all environments
+            const [devAuthors] = await pools.dev.query(`
+                SELECT AUTHOR, COUNT(*) as count, MAX(DATEEXECUTED) as lastChange
+                FROM DATABASECHANGELOG 
+                GROUP BY AUTHOR
+            `);
+            const [qaAuthors] = await pools.qa.query(`
+                SELECT AUTHOR, COUNT(*) as count, MAX(DATEEXECUTED) as lastChange
+                FROM DATABASECHANGELOG 
+                GROUP BY AUTHOR
+            `);
+            const [prodAuthors] = await pools.prod.query(`
+                SELECT AUTHOR, COUNT(*) as count, MAX(DATEEXECUTED) as lastChange
+                FROM DATABASECHANGELOG 
+                GROUP BY AUTHOR
+            `);
+
+            // Combine and aggregate
+            const allAuthors = [...devAuthors, ...qaAuthors, ...prodAuthors];
+            const authorMap = {};
+
+            allAuthors.forEach(record => {
+                if (!authorMap[record.AUTHOR]) {
+                    authorMap[record.AUTHOR] = {
+                        author: record.AUTHOR,
+                        totalChangesets: 0,
+                        lastChange: record.lastChange
+                    };
+                }
+                authorMap[record.AUTHOR].totalChangesets += record.count;
+                
+                if (new Date(record.lastChange) > new Date(authorMap[record.AUTHOR].lastChange)) {
+                    authorMap[record.AUTHOR].lastChange = record.lastChange;
+                }
+            });
+
+            authorStats = Object.values(authorMap).sort((a, b) => b.totalChangesets - a.totalChangesets);
+
+        } else {
+            const pool = pools[env];
+            if (!pool) {
+                return res.status(400).json({ success: false, error: 'Invalid environment' });
+            }
+
+            const [authors] = await pool.query(`
+                SELECT 
+                    AUTHOR,
+                    COUNT(*) as totalChangesets,
+                    MAX(DATEEXECUTED) as lastChange,
+                    MIN(DATEEXECUTED) as firstChange
+                FROM DATABASECHANGELOG 
+                GROUP BY AUTHOR
+                ORDER BY totalChangesets DESC
+            `);
+
+            authorStats = authors.map(a => ({
+                author: a.AUTHOR,
+                totalChangesets: a.totalChangesets,
+                lastChange: a.lastChange,
+                firstChange: a.firstChange
+            }));
+        }
+
+        res.json({
+            success: true,
+            environment: env,
+            count: authorStats.length,
+            authors: authorStats
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// 🆕 GET /api/monitoring/deployment-frequency - Deployment frequency metrics
+app.get('/api/monitoring/deployment-frequency', async (req, res) => {
+    const days = parseInt(req.query.days) || 30;
+
+    try {
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - days);
+        const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+
+        const frequency = {
+            dev: { count: 0, dates: [] },
+            qa: { count: 0, dates: [] },
+            prod: { count: 0, dates: [] }
+        };
+
+        for (const [env, pool] of Object.entries(pools)) {
+            const [deployments] = await pool.query(`
+                SELECT DATE(DATEEXECUTED) as deployDate, COUNT(*) as count
+                FROM DATABASECHANGELOG
+                WHERE DATEEXECUTED >= ?
+                GROUP BY DATE(DATEEXECUTED)
+                ORDER BY deployDate DESC
+            `, [cutoffDateStr]);
+
+            frequency[env].count = deployments.reduce((sum, d) => sum + d.count, 0);
+            frequency[env].dates = deployments.map(d => ({
+                date: d.deployDate,
+                changesets: d.count
+            }));
+        }
+
+        const totalDeployments = frequency.dev.count + frequency.qa.count + frequency.prod.count;
+        const deploymentsPerDay = totalDeployments / days;
+
+        res.json({
+            success: true,
+            period: `Last ${days} days`,
+            totalDeployments,
+            deploymentsPerDay: Math.round(deploymentsPerDay * 100) / 100,
+            byEnvironment: frequency,
+            metrics: {
+                mostActiveEnv: Object.entries(frequency).sort((a, b) => b[1].count - a[1].count)[0][0],
+                avgChangesetsPerDeployment: Math.round((totalDeployments / (
+                    frequency.dev.dates.length + frequency.qa.dates.length + frequency.prod.dates.length
+                )) * 100) / 100
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// 🆕 GET /api/monitoring/success-rate - Success/failure statistics
+app.get('/api/monitoring/success-rate', async (req, res) => {
+    const env = req.query.env || 'all';
+
+    try {
+        let totalExecutions = 0;
+        let successfulExecutions = 0;
+        let failedExecutions = 0;
+        let reranExecutions = 0;
+
+        const envList = env === 'all' ? ['dev', 'qa', 'prod'] : [env];
+
+        for (const envName of envList) {
+            const pool = pools[envName];
+            if (!pool) continue;
+
+            const [stats] = await pool.query(`
+                SELECT 
+                    EXECTYPE,
+                    COUNT(*) as count
+                FROM DATABASECHANGELOG
+                GROUP BY EXECTYPE
+            `);
+
+            stats.forEach(stat => {
+                totalExecutions += stat.count;
+                if (stat.EXECTYPE === 'EXECUTED') {
+                    successfulExecutions += stat.count;
+                } else if (stat.EXECTYPE === 'RERAN') {
+                    reranExecutions += stat.count;
+                } else if (stat.EXECTYPE === 'FAILED') {
+                    failedExecutions += stat.count;
+                }
+            });
+        }
+
+        const successRate = totalExecutions > 0 
+            ? Math.round((successfulExecutions / totalExecutions) * 100 * 100) / 100
+            : 100;
+
+        res.json({
+            success: true,
+            environment: env,
+            totalExecutions,
+            successfulExecutions,
+            failedExecutions,
+            reranExecutions,
+            successRate: successRate,
+            failureRate: Math.round((failedExecutions / totalExecutions) * 100 * 100) / 100 || 0,
+            rerunRate: Math.round((reranExecutions / totalExecutions) * 100 * 100) / 100 || 0
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// 🆕 GET /api/monitoring/audit-trail - Complete audit trail
+app.get('/api/monitoring/audit-trail', async (req, res) => {
+    const limit = parseInt(req.query.limit) || 50;
+    const env = req.query.env || 'all';
+
+    try {
+        let auditEntries = [];
+
+        const envList = env === 'all' ? ['dev', 'qa', 'prod'] : [env];
+
+        for (const envName of envList) {
+            const pool = pools[envName];
+            if (!pool) continue;
+
+            const [entries] = await pool.query(`
+                SELECT 
+                    ID,
+                    AUTHOR,
+                    FILENAME,
+                    DATEEXECUTED,
+                    ORDEREXECUTED,
+                    EXECTYPE,
+                    DESCRIPTION,
+                    DEPLOYMENT_ID
+                FROM DATABASECHANGELOG
+                ORDER BY DATEEXECUTED DESC
+                LIMIT ?
+            `, [limit]);
+
+            auditEntries.push(...entries.map(e => ({
+                ...e,
+                environment: envName.toUpperCase()
+            })));
+        }
+
+        // Sort by date and limit
+        auditEntries.sort((a, b) => new Date(b.DATEEXECUTED) - new Date(a.DATEEXECUTED));
+        auditEntries = auditEntries.slice(0, limit);
+
+        res.json({
+            success: true,
+            environment: env,
+            count: auditEntries.length,
+            auditTrail: auditEntries
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: 'Liquibase API Server is running' });
 });
@@ -449,10 +683,16 @@ app.listen(PORT, () => {
 ║     Port: ${PORT}                                          ║
 ║     Environment: ${process.env.NODE_ENV || 'development'}                              ║
 ║                                                            ║
-║     Available Endpoints:                                   ║
+║     📊 Monitoring Endpoints (NEW):                         ║
+║     • GET  /api/monitoring/execution-times?env=dev         ║
+║     • GET  /api/monitoring/author-stats?env=all            ║
+║     • GET  /api/monitoring/deployment-frequency?days=30    ║
+║     • GET  /api/monitoring/success-rate?env=all            ║
+║     • GET  /api/monitoring/audit-trail?env=all&limit=50    ║
+║                                                            ║
+║     📋 Standard Endpoints:                                 ║
 ║     • GET  /api/environments                               ║
 ║     • GET  /api/migrations/history?env=dev&limit=10        ║
-║     • GET  /api/migrations/pending?env=dev                 ║
 ║     • GET  /api/database/status?env=dev                    ║
 ║     • GET  /api/migrations/diff?env1=dev&env2=prod         ║
 ║     • GET  /api/stats                                      ║

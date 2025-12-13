@@ -14,16 +14,20 @@
                 <h1>🗄️ Liquibase Migration Dashboard</h1>
                 <p>Monitor and manage database schema changes across all environments</p>
             </div>
-            <div class="header-right">
-                <div id="connectionStatus" class="connection-status disconnected">
-                    <span class="status-dot red"></span>
-                    <span>Disconnected</span>
-                </div>
-                <button class="refresh-btn" onclick="refreshAllData()" id="refreshBtn">
-                    <span>🔄</span>
-                    <span>Refresh</span>
-                </button>
-            </div>
+           <div class="header-right">
+    <div id="connectionStatus" class="connection-status disconnected">
+        <span class="status-dot red"></span>
+        <span>Disconnected</span>
+    </div>
+    <button class="refresh-btn" onclick="window.location.href='monitoring.html'">
+        <span>📊</span>
+        <span>Monitoring</span>
+    </button>
+    <button class="refresh-btn" onclick="refreshAllData()" id="refreshBtn">
+        <span>🔄</span>
+        <span>Refresh</span>
+    </button>
+</div>
         </div>
 
         <!-- Statistics Cards -->

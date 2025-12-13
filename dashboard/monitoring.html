@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liquibase Monitoring Dashboard</title>
+    <link rel="stylesheet" href="index.css">
+     <link rel="stylesheet" href="monitoring.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <h1>📊 Liquibase Monitoring Dashboard</h1>
+                <p>Real-time performance metrics and observability</p>
+            </div>
+            <div class="header-right">
+                <div id="connectionStatus" class="connection-status disconnected">
+                    <span class="status-dot red"></span>
+                    <span>Disconnected</span>
+                </div>
+                <button class="refresh-btn" onclick="window.location.href='index.html'">
+                    <span>🏠</span>
+                    <span>Main Dashboard</span>
+                </button>
+                <button class="refresh-btn" onclick="refreshAllData()" id="refreshBtn">
+                    <span>🔄</span>
+                    <span>Refresh</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Success Rate Big Metric -->
+        <div class="big-metric" id="bigSuccessRate">
+            <div class="big-metric-value">
+                <span class="loading-spinner" style="width: 50px; height: 50px;"></span>
+            </div>
+            <div class="big-metric-label">Overall Success Rate</div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('execution')">⏱️ Execution Times</button>
+            <button class="nav-tab" onclick="showTab('authors')">👥 Author Activity</button>
+            <button class="nav-tab" onclick="showTab('frequency')">📈 Deployment Frequency</button>
+            <button class="nav-tab" onclick="showTab('audit')">📋 Audit Trail</button>
+        </div>
+
+        <!-- Execution Times Tab -->
+        <div id="executionTab" class="tab-content">
+            <div class="monitoring-grid">
+                <div class="chart-container">
+                    <h3 class="chart-title">Execution Times (DEV)</h3>
+                    <div id="devExecutionChart">
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <h3 class="chart-title">Execution Times (PROD)</h3>
+                    <div id="prodExecutionChart">
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Authors Tab -->
+        <div id="authorsTab" class="tab-content" style="display:none;">
+            <div class="environments-section">
+                <h2 class="section-title">👥 Top Contributors</h2>
+                <div id="authorStats">
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Frequency Tab -->
+        <div id="frequencyTab" class="tab-content" style="display:none;">
+            <div class="monitoring-grid">
+                <div class="chart-container">
+                    <h3 class="chart-title">Deployment Frequency (Last 30 Days)</h3>
+                    <div id="frequencyChart">
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <h3 class="chart-title">Environment Activity</h3>
+                    <div id="envActivity">
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audit Trail Tab -->
+        <div id="auditTab" class="tab-content" style="display:none;">
+            <div class="environments-section">
+                <h2 class="section-title">📋 Complete Audit Trail</h2>
+                <div id="auditTrail">
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Liquibase Monitoring Dashboard | Last updated: <span id="lastUpdateTime">Never</span></p>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/api';
+        let currentTab = 'execution';
+
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshAllData();
+            startAutoRefresh();
+        });
+
+        function startAutoRefresh() {
+            setInterval(refreshAllData, 30000); // 30 seconds
+        }
+
+        async function refreshAllData() {
+            const btn = document.getElementById('refreshBtn');
+            btn.disabled = true;
+            
+            try {
+                await Promise.all([
+                    loadSuccessRate(),
+                    loadExecutionTimes(),
+                    loadAuthorStats(),
+                    loadDeploymentFrequency(),
+                    loadAuditTrail()
+                ]);
+                
+                updateConnectionStatus(true);
+                document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
+            } catch (error) {
+                console.error('Error refreshing data:', error);
+                updateConnectionStatus(false);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connectionStatus');
+            if (connected) {
+                statusEl.className = 'connection-status connected';
+                statusEl.innerHTML = '<span class="status-dot green"></span><span>Connected</span>';
+            } else {
+                statusEl.className = 'connection-status disconnected';
+                statusEl.innerHTML = '<span class="status-dot red"></span><span>Disconnected</span>';
+            }
+        }
+
+        function showTab(tabName) {
+            currentTab = tabName;
+            
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
+            document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
+            
+            // Show selected tab
+            document.getElementById(tabName + 'Tab').style.display = 'block';
+            event.target.classList.add('active');
+        }
+
+        async function loadSuccessRate() {
+            try {
+                const response = await fetch(`${API_BASE}/monitoring/success-rate?env=all`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const bigMetric = document.getElementById('bigSuccessRate');
+                    bigMetric.querySelector('.big-metric-value').textContent = data.successRate + '%';
+                }
+            } catch (error) {
+                console.error('Error loading success rate:', error);
+            }
+        }
+
+        async function loadExecutionTimes() {
+            try {
+                const [devResponse, prodResponse] = await Promise.all([
+                    fetch(`${API_BASE}/monitoring/execution-times?env=dev&limit=10`),
+                    fetch(`${API_BASE}/monitoring/execution-times?env=prod&limit=10`)
+                ]);
+
+                const devData = await devResponse.json();
+                const prodData = await prodResponse.json();
+
+                renderExecutionChart('devExecutionChart', devData.executions || []);
+                renderExecutionChart('prodExecutionChart', prodData.executions || []);
+            } catch (error) {
+                console.error('Error loading execution times:', error);
+            }
+        }
+
+        function renderExecutionChart(containerId, executions) {
+            const container = document.getElementById(containerId);
+            
+            if (executions.length === 0) {
+                container.innerHTML = '<p style="text-align:center;color:#666;">No execution data available</p>';
+                return;
+            }
+
+            const maxTime = Math.max(...executions.map(e => e.executionTimeSeconds));
+            
+            let html = '<div class="time-chart">';
+            
+            executions.reverse().forEach(exec => {
+                const heightPercent = (exec.executionTimeSeconds / maxTime) * 100;
+                html += `
+                    <div class="time-bar" style="height: ${heightPercent}%">
+                        <div class="time-tooltip">
+                            ${exec.id}<br>
+                            ${exec.executionTimeSeconds}s<br>
+                            by ${exec.author}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        async function loadAuthorStats() {
+            try {
+                const response = await fetch(`${API_BASE}/monitoring/author-stats?env=all`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderAuthorStats(data.authors);
+                }
+            } catch (error) {
+                console.error('Error loading author stats:', error);
+            }
+        }
+
+        function renderAuthorStats(authors) {
+            const container = document.getElementById('authorStats');
+            
+            if (authors.length === 0) {
+                container.innerHTML = '<p style="text-align:center;color:#666;">No author data available</p>';
+                return;
+            }
+
+            let html = '';
+            authors.forEach((author, index) => {
+                const lastChange = new Date(author.lastChange).toLocaleDateString();
+                html += `
+                    <div class="author-card">
+                        <div class="author-info">
+                            <div class="author-name">${index + 1}. ${author.author}</div>
+                            <div class="author-stats">Last change: ${lastChange}</div>
+                        </div>
+                        <div class="author-badge">${author.totalChangesets} changesets</div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        async function loadDeploymentFrequency() {
+            try {
+                const response = await fetch(`${API_BASE}/monitoring/deployment-frequency?days=30`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderFrequencyChart(data);
+                    renderEnvActivity(data.byEnvironment);
+                }
+            } catch (error) {
+                console.error('Error loading deployment frequency:', error);
+            }
+        }
+
+        function renderFrequencyChart(data) {
+            const container = document.getElementById('frequencyChart');
+            
+            let html = `
+                <div style="margin-bottom: 20px;">
+                    <p><strong>Total Deployments:</strong> ${data.totalDeployments}</p>
+                    <p><strong>Deployments per Day:</strong> ${data.deploymentsPerDay}</p>
+                    <p><strong>Most Active:</strong> ${data.metrics.mostActiveEnv.toUpperCase()}</p>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+
+        function renderEnvActivity(byEnvironment) {
+            const container = document.getElementById('envActivity');
+            const maxCount = Math.max(byEnvironment.dev.count, byEnvironment.qa.count, byEnvironment.prod.count);
+            
+            let html = '<div class="frequency-timeline">';
+            
+            ['dev', 'qa', 'prod'].forEach(env => {
+                const widthPercent = (byEnvironment[env].count / maxCount) * 100;
+                html += `
+                    <div class="metric-bar">
+                        <div class="metric-label">${env.toUpperCase()}</div>
+                        <div class="metric-progress">
+                            <div class="metric-fill" style="width: ${widthPercent}%">
+                                ${byEnvironment[env].count}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        async function loadAuditTrail() {
+            try {
+                const response = await fetch(`${API_BASE}/monitoring/audit-trail?env=all&limit=30`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderAuditTrail(data.auditTrail);
+                }
+            } catch (error) {
+                console.error('Error loading audit trail:', error);
+            }
+        }
+
+        function renderAuditTrail(auditTrail) {
+            const container = document.getElementById('auditTrail');
+            
+            if (auditTrail.length === 0) {
+                container.innerHTML = '<p style="text-align:center;color:#666;">No audit data available</p>';
+                return;
+            }
+
+            let html = '';
+            auditTrail.forEach(entry => {
+                const envClass = `audit-env-${entry.environment.toLowerCase()}`;
+                const date = new Date(entry.DATEEXECUTED).toLocaleString();
+                
+                html += `
+                    <div class="audit-entry">
+                        <div class="audit-header">
+                            <span class="audit-id">${entry.ID}</span>
+                            <span class="audit-env-badge ${envClass}">${entry.environment}</span>
+                        </div>
+                        <p><strong>Author:</strong> ${entry.AUTHOR}</p>
+                        <p><strong>Executed:</strong> ${date}</p>
+                        <p><strong>Type:</strong> ${entry.EXECTYPE}</p>
+                        <p><strong>File:</strong> ${entry.FILENAME}</p>
+                        ${entry.DESCRIPTION ? `<p><strong>Description:</strong> ${entry.DESCRIPTION}</p>` : ''}
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
