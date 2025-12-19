@@ -3,23 +3,15 @@
     xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="
-        http://www.liquibase.org/xml/ns/dbchangelog
-        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+      http://www.liquibase.org/xml/ns/dbchangelog
+      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
 
-    <!-- Version 1.0 - Initial Schema -->
-    <include file="v1.0/db.changelog-v1.0.xml" relativeToChangelogFile="true"/>
-    
-    <!-- Version 1.1 - Additional Tables -->
-    <include file="v1.1/002-create-department.xml" relativeToChangelogFile="true"/>
-    <include file="v1.1/003-create-project.xml" relativeToChangelogFile="true"/>
-    <include file="v1.1/004-add-status-column.xml" relativeToChangelogFile="true"/>
-    <include file="v1.1/005-test-failure.xml" relativeToChangelogFile="true"/>
-    
-    <!-- Version 1.2 - User Metadata & Activity -->
-    <include file="v1.2/006-add-user-metadata.xml" relativeToChangelogFile="true"/>
-
-    <!-- Version 1.3 -->
-<include file="v1.3/007-add-phone-to-users.xml" relativeToChangelogFile="true"/>
+    <include file="v1.0/001-create-users.xml"
+             relativeToChangelogFile="true"/>
+    <include file="v1.0/002-insert-users.xml"
+         relativeToChangelogFile="true"/>
+    <include file="003-add-email-column.xml"
+          relativeToChangelogFile="true"/>
 
 
 </databaseChangeLog>
