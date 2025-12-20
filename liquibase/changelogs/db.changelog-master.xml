@@ -6,12 +6,8 @@
       http://www.liquibase.org/xml/ns/dbchangelog
       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
 
-    <include file="v1.0/001-create-users.xml"
-             relativeToChangelogFile="true"/>
-    <include file="v1.0/002-insert-users.xml"
-         relativeToChangelogFile="true"/>
-    <include file="003-add-email-column.xml"
-          relativeToChangelogFile="true"/>
-
+    <include file="v1.0/001-create-users.xml" relativeToChangelogFile="true"/>
+    <include file="v1.0/002-insert-users.xml" relativeToChangelogFile="true"/>
+    <!-- Removed 003-add-email-column.xml as email column already exists in 001 -->
 
 </databaseChangeLog>

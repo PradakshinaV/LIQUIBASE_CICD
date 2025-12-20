@@ -1,8 +1,0 @@
-changeLogFile=changelogs/db.changelog-master.xml
-classpath=lib/mysql-connector-j-9.4.0.jar
-driver=com.mysql.cj.jdbc.Driver
-url=jdbc:mysql://localhost:3306/testdb_dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-username=cicd_user
-password=YOUR_PASSWORD_HERE
-logLevel=info
-liquibase.hub.mode=off
