@@ -2,8 +2,10 @@ name: Liquibase Migration Pipeline
 
 on:
   push:
-    branches: [ test-validation ]
-  workflow_dispatch:
+    branches: [ main, test-validation ]  # Triggers on both branches
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual trigger
 
 jobs:
 # =====================================================
@@ -62,8 +64,8 @@ jobs:
             --url="jdbc:mysql://127.0.0.1:3306/testdb_dev" \
             --username=root \
             --password=root \
-            --changeLogFile=backend/changelogs/master-changelog.xml \
-            --searchPath=backend/changelogs \
+            --changeLogFile=liquibase/changelogs/db.changelog-master.xml \
+            --searchPath=liquibase/changelogs \
             validate
 
       - name: Deploy to DEV
@@ -72,9 +74,20 @@ jobs:
             --url="jdbc:mysql://127.0.0.1:3306/testdb_dev" \
             --username=root \
             --password=root \
-            --changeLogFile=backend/changelogs/master-changelog.xml \
-            --searchPath=backend/changelogs \
+            --changeLogFile=liquibase/changelogs/db.changelog-master.xml \
+            --searchPath=liquibase/changelogs \
             update
+
+      - name: Generate Changelog Report
+        if: always()
+        run: |
+          liquibase \
+            --url="jdbc:mysql://127.0.0.1:3306/testdb_dev" \
+            --username=root \
+            --password=root \
+            --changeLogFile=liquibase/changelogs/db.changelog-master.xml \
+            --searchPath=liquibase/changelogs \
+            status --verbose
 
 # =====================================================
 # QA
@@ -93,6 +106,11 @@ jobs:
           MYSQL_DATABASE: testdb_qa
         ports:
           - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
       - uses: actions/checkout@v4
@@ -114,14 +132,21 @@ jobs:
           curl -sLo $HOME/liquibase/lib/mysql.jar \
           https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.1.0/mysql-connector-j-9.1.0.jar
 
+      - name: Wait for MySQL
+        run: |
+          for i in {1..30}; do
+            mysqladmin ping -h 127.0.0.1 -uroot -proot && break
+            sleep 2
+          done
+
       - name: Deploy to QA
         run: |
           liquibase \
             --url="jdbc:mysql://127.0.0.1:3306/testdb_qa" \
             --username=root \
             --password=root \
-            --changeLogFile=backend/changelogs/master-changelog.xml \
-            --searchPath=backend/changelogs \
+            --changeLogFile=liquibase/changelogs/db.changelog-master.xml \
+            --searchPath=liquibase/changelogs \
             update
 
 # =====================================================
@@ -141,6 +166,11 @@ jobs:
           MYSQL_DATABASE: testdb_prod
         ports:
           - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
       - uses: actions/checkout@v4
@@ -162,12 +192,30 @@ jobs:
           curl -sLo $HOME/liquibase/lib/mysql.jar \
           https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/9.1.0/mysql-connector-j-9.1.0.jar
 
+      - name: Wait for MySQL
+        run: |
+          for i in {1..30}; do
+            mysqladmin ping -h 127.0.0.1 -uroot -proot && break
+            sleep 2
+          done
+
       - name: Deploy to PROD
         run: |
           liquibase \
             --url="jdbc:mysql://127.0.0.1:3306/testdb_prod" \
             --username=root \
             --password=root \
-            --changeLogFile=backend/changelogs/master-changelog.xml \
-            --searchPath=backend/changelogs \
+            --changeLogFile=liquibase/changelogs/db.changelog-master.xml \
+            --searchPath=liquibase/changelogs \
             update
+
+      - name: Generate Production Report
+        if: always()
+        run: |
+          liquibase \
+            --url="jdbc:mysql://127.0.0.1:3306/testdb_prod" \
+            --username=root \
+            --password=root \
+            --changeLogFile=liquibase/changelogs/db.changelog-master.xml \
+            --searchPath=liquibase/changelogs \
+            history
