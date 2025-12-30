@@ -551,120 +551,170 @@
             }
         }
 
-        function initiateRollback() {
-            const env = document.getElementById('rollbackEnv').value;
-            const count = parseInt(document.getElementById('rollbackCount').value);
-            
-            console.log('Initiating rollback:', { env, count });
-            
-            rollbackEnvSelected = env;
-            rollbackCountSelected = count;
-            
-            const confirmDialog = document.getElementById('rollbackConfirm');
-            const confirmText = document.getElementById('rollbackConfirmText');
-            
-            if (!confirmDialog || !confirmText) {
-                console.error('ERROR: Confirmation dialog elements not found!');
-                alert('Error: Confirmation dialog not found. Please refresh the page.');
-                return;
-            }
-            
-            const envNames = { dev: 'DEVELOPMENT', qa: 'QA', prod: 'PRODUCTION' };
-            
-            let html = `
-                <p>You are about to rollback <strong>${count}</strong> changeset(s) 
-                from <strong>${envNames[env]}</strong> environment.</p>
+     // Replace these functions in your index.html <script> section
+
+async function initiateRollback() {
+    const env = document.getElementById('rollbackEnv').value;
+    const count = parseInt(document.getElementById('rollbackCount').value);
+    
+    rollbackEnvSelected = env;
+    rollbackCountSelected = count;
+    
+    // First, get preview of what will be rolled back
+    try {
+        const response = await fetch(`${API_BASE}/migrations/rollback-preview?env=${env}&count=${count}`);
+        const previewData = await response.json();
+        
+        if (!previewData.success) {
+            alert('Error getting rollback preview: ' + previewData.error);
+            return;
+        }
+
+        const confirmDialog = document.getElementById('rollbackConfirm');
+        const confirmText = document.getElementById('rollbackConfirmText');
+        
+        const envNames = { dev: 'DEVELOPMENT', qa: 'QA', prod: 'PRODUCTION' };
+        
+        let html = `
+            <p><strong>⚠️ You are about to rollback ${count} changeset(s) from ${envNames[env]}</strong></p>
+        `;
+        
+        if (env === 'prod') {
+            html += `<div class="prod-warning">⚠️ CRITICAL: THIS IS PRODUCTION ENVIRONMENT!</div>`;
+        }
+        
+        html += `<div style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+            <h4 style="margin-bottom: 10px;">Changesets to be rolled back:</h4>`;
+        
+        previewData.changesetsToRollback.forEach((cs, index) => {
+            html += `
+                <div style="padding: 8px; margin: 5px 0; background: white; border-left: 3px solid #dc3545; border-radius: 4px;">
+                    <strong>${index + 1}. ${cs.ID}</strong><br>
+                    <small>Author: ${cs.AUTHOR} | ${new Date(cs.DATEEXECUTED).toLocaleString()}</small><br>
+                    <small>${cs.DESCRIPTION || 'No description'}</small>
+                </div>
+            `;
+        });
+        
+        html += `</div>
+            <p style="color: #721c24; font-weight: 600; margin-top: 15px;">
+                ⚠️ This action CANNOT be undone automatically. Make sure you have a backup!
+            </p>
+            <p style="color: #856404;">
+                Current changesets: ${previewData.changesetsToRollback[0]?.ORDEREXECUTED || 'Unknown'} → 
+                After rollback: ${(previewData.changesetsToRollback[0]?.ORDEREXECUTED || 0) - count}
+            </p>`;
+        
+        confirmText.innerHTML = html;
+        confirmDialog.style.display = 'block';
+        confirmDialog.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+async function executeRollback() {
+    const confirmDialog = document.getElementById('rollbackConfirm');
+    confirmDialog.innerHTML = `
+        <div style="text-align: center; padding: 30px;">
+            <div class="loading-spinner" style="width: 50px; height: 50px; margin: 0 auto 20px;"></div>
+            <h3>Executing Rollback...</h3>
+            <p style="color: #666;">Please wait. This may take a few moments.</p>
+        </div>
+    `;
+    
+    try {
+        const response = await fetch(`${API_BASE}/migrations/rollback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                env: rollbackEnvSelected,
+                count: rollbackCountSelected
+            })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            confirmDialog.innerHTML = `
+                <div class="success-message">
+                    <h3>✅ Rollback Completed Successfully</h3>
+                    <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <p><strong>Environment:</strong> ${data.environment.toUpperCase()}</p>
+                        <p><strong>Changesets Rolled Back:</strong> ${data.changesetsRolledBack}</p>
+                        <p><strong>Before:</strong> ${data.changesetsBefore} changesets</p>
+                        <p><strong>After:</strong> ${data.changesetsAfter} changesets</p>
+                        ${data.currentChangeset ? `
+                            <div style="margin-top: 15px; padding: 10px; background: white; border-radius: 6px;">
+                                <strong>Current Changeset:</strong><br>
+                                ${data.currentChangeset.ID}<br>
+                                <small>by ${data.currentChangeset.AUTHOR}</small>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <details style="margin: 15px 0;">
+                        <summary style="cursor: pointer; font-weight: 600; color: #667eea;">
+                            View Command Output
+                        </summary>
+                        <pre style="background: #f4f4f4; padding: 15px; border-radius: 6px; overflow-x: auto; margin-top: 10px; font-size: 0.85em;">
+${data.output || 'No output available'}</pre>
+                    </details>
+                    <button class="confirm-no" onclick="closeRollbackSection()" style="margin-top: 15px;">
+                        Close
+                    </button>
+                </div>
             `;
             
-            if (env === 'prod') {
-                html += `
-                    <div class="prod-warning">
-                        ⚠️ WARNING: This is PRODUCTION!
-                    </div>
-                `;
-            }
-            
-            html += `<p>This action will undo database changes. Are you absolutely sure?</p>`;
-            
-            confirmText.innerHTML = html;
-            confirmDialog.style.display = 'block';
-            confirmDialog.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Refresh dashboard data
+            setTimeout(() => refreshAllData(), 1500);
+        } else {
+            throw new Error(data.error || 'Rollback failed');
         }
+        
+    } catch (error) {
+        confirmDialog.innerHTML = `
+            <div class="error-message">
+                <h3>❌ Rollback Failed</h3>
+                <p style="margin: 15px 0;"><strong>Error:</strong> ${error.message}</p>
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                    <strong>⚠️ Important:</strong>
+                    <p>The database may be in an inconsistent state. Please:</p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Check the database status</li>
+                        <li>Review Liquibase logs</li>
+                        <li>Contact your DBA if needed</li>
+                        <li>Consider restoring from backup</li>
+                    </ul>
+                </div>
+                <button class="confirm-no" onclick="cancelRollback()" style="margin-top: 15px;">
+                    Close
+                </button>
+            </div>
+        `;
+    }
+}
 
-        async function executeRollback() {
-            const confirmDialog = document.getElementById('rollbackConfirm');
-            if (!confirmDialog) return;
-            
-            confirmDialog.innerHTML = '<div class="loading-spinner" style="margin: 20px auto;"></div><p style="text-align:center;">Executing rollback...</p>';
-            
-            try {
-                const response = await fetch(`${API_BASE}/migrations/rollback`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        env: rollbackEnvSelected,
-                        count: rollbackCountSelected
-                    })
-                });
+function cancelRollback() {
+    const confirmDialog = document.getElementById('rollbackConfirm');
+    const confirmText = document.getElementById('rollbackConfirmText');
+    
+    if (confirmDialog) confirmDialog.style.display = 'none';
+    if (confirmText) confirmText.innerHTML = '';
+}
 
-                const data = await response.json();
-                
-                if (data.success) {
-                    const simulationBadge = data.simulation ? 
-                        '<span class="badge badge-warning">SIMULATION MODE</span>' : 
-                        '<span class="badge badge-success">EXECUTED</span>';
-                    
-                    confirmDialog.innerHTML = `
-                        <div class="success-message">
-                            <h3>✅ Rollback ${data.simulation ? 'Simulation' : 'Execution'} Complete</h3>
-                            ${simulationBadge}
-                            <p style="margin-top: 15px;"><strong>Environment:</strong> ${data.environment.toUpperCase()}</p>
-                            <p><strong>Changesets rolled back:</strong> ${data.changesetsRolledBack}</p>
-                            <p><strong>Command executed:</strong></p>
-                            <code style="display: block; background: #f4f4f4; padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 0.85em; word-wrap: break-word;">
-                            ${data.command}
-                            </code>
-                            ${data.simulation ? 
-                                '<p style="color: #856404;"><strong>Note:</strong> This was a simulation. To enable real rollback, update backend configuration.</p>' : 
-                                '<p style="color: #155724;"><strong>Success!</strong> Database has been rolled back.</p>'
-                            }
-                            <button class="confirm-no" onclick="closeRollbackSection()" style="margin-top: 15px;">Close</button>
-                        </div>
-                    `;
-                    
-                    setTimeout(() => refreshAllData(), 2000);
-                } else {
-                    throw new Error(data.error || 'Rollback failed');
-                }
-                
-            } catch (error) {
-                confirmDialog.innerHTML = `
-                    <div class="error-message">
-                        <h3>❌ Rollback Failed</h3>
-                        <p>${error.message}</p>
-                        <button class="confirm-no" onclick="cancelRollback()">Close</button>
-                    </div>
-                `;
-            }
-        }
-
-        function cancelRollback() {
-            const confirmDialog = document.getElementById('rollbackConfirm');
-            const confirmText = document.getElementById('rollbackConfirmText');
-            
-            if (confirmDialog) confirmDialog.style.display = 'none';
-            if (confirmText) confirmText.innerHTML = '';
-        }
-
-        function closeRollbackSection() {
-            const section = document.getElementById('rollbackSection');
-            const confirmDialog = document.getElementById('rollbackConfirm');
-            const confirmText = document.getElementById('rollbackConfirmText');
-            
-            if (section) section.style.display = 'none';
-            if (confirmDialog) confirmDialog.style.display = 'none';
-            if (confirmText) confirmText.innerHTML = '';
-        }
+function closeRollbackSection() {
+    const section = document.getElementById('rollbackSection');
+    const confirmDialog = document.getElementById('rollbackConfirm');
+    const confirmText = document.getElementById('rollbackConfirmText');
+    
+    if (section) section.style.display = 'none';
+    if (confirmDialog) confirmDialog.style.display = 'none';
+    if (confirmText) confirmText.innerHTML = '';
+    
+    // Refresh the page to show updated data
+    refreshAllData();
+}
     </script>
 </body>
 </html>

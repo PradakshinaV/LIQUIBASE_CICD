@@ -1,6 +1,11 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 require('dotenv').config();
 
 const app = express();
@@ -110,7 +115,7 @@ function extractVersion(changesetId) {
 }
 
 // ============================================
-// EXISTING ENDPOINTS
+// API ENDPOINTS
 // ============================================
 
 app.get('/api/environments', async (req, res) => {
@@ -336,38 +341,192 @@ app.post('/api/migrations/rollback', async (req, res) => {
     if (!['dev', 'qa', 'prod'].includes(env)) {
         return res.status(400).json({
             success: false,
-            error: 'Invalid environment'
+            error: 'Invalid environment. Must be dev, qa, or prod'
         });
     }
 
+    // Validate count
+    if (count < 1 || count > 10) {
+        return res.status(400).json({
+            success: false,
+            error: 'Count must be between 1 and 10'
+        });
+    }
+
+    // Get current changesets before rollback
+    let beforeChangesets = 0;
     try {
-        const envNames = { dev: 'DEV', qa: 'QA', prod: 'PROD' };
-        const command = `liquibase --defaults-file=liquibase.${env}.properties rollback-count ${count}`;
+        const [countResult] = await pools[env].query(
+            'SELECT COUNT(*) as total FROM DATABASECHANGELOG'
+        );
+        beforeChangesets = countResult[0].total;
         
+        if (beforeChangesets < count) {
+            return res.status(400).json({
+                success: false,
+                error: `Cannot rollback ${count} changesets. Only ${beforeChangesets} changesets exist in ${env.toUpperCase()}.`
+            });
+        }
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to get current changeset count: ' + error.message
+        });
+    }
+
+    // FIXED: Use the correct path to liquibase directory
+    // Go up two directories from backend to reach LIQUIBASE_CICD, then into liquibase
+    const liquibaseDir = path.join(process.cwd(), '..', '..', 'liquibase');
+    const propsFile = path.join(liquibaseDir, `liquibase.${env}.properties`);
+    
+    console.log('Looking for properties file at:', propsFile);
+    console.log('Properties file exists:', fs.existsSync(propsFile));
+    
+    if (!fs.existsSync(propsFile)) {
+        return res.status(500).json({
+            success: false,
+            error: `Liquibase properties file not found: ${propsFile}`,
+            currentDir: process.cwd(),
+            expectedPath: propsFile,
+            troubleshooting: [
+                'Check if file exists at: ' + propsFile,
+                'Current working directory: ' + process.cwd(),
+                `Ensure liquibase.${env}.properties exists in C:\\LIQUIBASE_CICD\\liquibase\\`,
+                'Verify the file contains: url, username, password, changeLogFile'
+            ]
+        });
+    }
+
+    // Execute Liquibase rollback from the liquibase directory
+    // Use relative path for properties file since we're changing directory
+    const liquibaseCmd = `liquibase --defaults-file=liquibase.${env}.properties rollback-count ${count}`;
+
+    console.log(`Executing: ${liquibaseCmd} in directory: ${liquibaseDir}`);
+
+    try {
+        const { stdout, stderr } = await execPromise(liquibaseCmd, {
+            cwd: liquibaseDir,  // IMPORTANT: Run from liquibase directory
+            timeout: 30000 // 30 second timeout
+        });
+
+        // Wait a moment for database to settle
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Get changesets after rollback
+        const [afterCountResult] = await pools[env].query(
+            'SELECT COUNT(*) as total FROM DATABASECHANGELOG'
+        );
+        const afterChangesets = afterCountResult[0].total;
+        const actualRolledBack = beforeChangesets - afterChangesets;
+
+        // Get latest changeset info
+        const [latestChangeset] = await pools[env].query(`
+            SELECT ID, AUTHOR, DATEEXECUTED, DESCRIPTION
+            FROM DATABASECHANGELOG 
+            ORDER BY ORDEREXECUTED DESC 
+            LIMIT 1
+        `);
+
         res.json({
             success: true,
-            message: `Rollback simulation complete for ${envNames[env]}`,
-            simulation: true,
-            command: command,
+            message: `Successfully rolled back ${actualRolledBack} changeset(s) in ${env.toUpperCase()}`,
+            simulation: false,
             environment: env,
-            changesetsRolledBack: count,
-            note: 'This is a simulation. To enable real rollback, configure backend with proper authorization.'
+            changesetsRolledBack: actualRolledBack,
+            changesetsBefore: beforeChangesets,
+            changesetsAfter: afterChangesets,
+            currentChangeset: latestChangeset[0] || null,
+            command: liquibaseCmd,
+            workingDirectory: liquibaseDir,
+            output: stdout || 'Rollback completed successfully'
         });
         
     } catch (error) {
+        console.error('Rollback error:', error);
+        
+        // Try to get current state even after error
+        let currentState = {};
+        try {
+            const [countResult] = await pools[env].query(
+                'SELECT COUNT(*) as total FROM DATABASECHANGELOG'
+            );
+            currentState.remainingChangesets = countResult[0].total;
+        } catch (e) {
+            currentState.error = 'Could not determine current state';
+        }
+
+        // Better error message formatting
+        let errorMessage = error.message;
+        if (error.code === 'ENOENT') {
+            errorMessage = 'Liquibase command not found. Please ensure Liquibase is installed and in your PATH.';
+        }
+
         res.status(500).json({
             success: false,
-            error: error.message,
-            environment: env
+            error: errorMessage,
+            details: {
+                command: liquibaseCmd,
+                workingDirectory: liquibaseDir,
+                stderr: error.stderr || 'No error output',
+                stdout: error.stdout || 'No standard output',
+                code: error.code
+            },
+            environment: env,
+            currentState,
+            troubleshooting: [
+                'Check if Liquibase is installed: run "liquibase --version"',
+                'Verify liquibase properties file exists at: ' + propsFile,
+                'Ensure database credentials are valid',
+                'Check if changesets have rollback commands defined in XML/SQL',
+                'Review server console logs for detailed error information',
+                'Verify database connection is working'
+            ]
+        });
+    }
+});
+
+// Rollback preview endpoint
+app.get('/api/migrations/rollback-preview', async (req, res) => {
+    const env = req.query.env || 'dev';
+    const count = parseInt(req.query.count) || 1;
+
+    try {
+        const pool = pools[env];
+        if (!pool) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid environment'
+            });
+        }
+
+        // Get the changesets that would be rolled back
+        const [changesets] = await pool.query(`
+            SELECT 
+                ID, AUTHOR, DATEEXECUTED, DESCRIPTION, ORDEREXECUTED
+            FROM DATABASECHANGELOG 
+            ORDER BY ORDEREXECUTED DESC 
+            LIMIT ?
+        `, [count]);
+
+        res.json({
+            success: true,
+            environment: env,
+            changesetCount: changesets.length,
+            changesetsToRollback: changesets,
+            warning: `This will rollback ${changesets.length} changeset(s) from ${env.toUpperCase()}`
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 });
 
 // ============================================
-// NEW TASK 22: MONITORING ENDPOINTS
+// MONITORING ENDPOINTS
 // ============================================
 
-// 🆕 GET /api/monitoring/execution-times - Track execution times
 app.get('/api/monitoring/execution-times', async (req, res) => {
     const env = req.query.env || 'dev';
     const limit = parseInt(req.query.limit) || 20;
@@ -378,21 +537,15 @@ app.get('/api/monitoring/execution-times', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid environment' });
         }
 
-        // Get changesets with their execution order and timestamps
         const [changesets] = await pool.query(`
             SELECT 
-                ID,
-                AUTHOR,
-                DATEEXECUTED,
-                ORDEREXECUTED,
-                DESCRIPTION,
-                EXECTYPE
+                ID, AUTHOR, DATEEXECUTED, ORDEREXECUTED,
+                DESCRIPTION, EXECTYPE
             FROM DATABASECHANGELOG 
             ORDER BY ORDEREXECUTED DESC
             LIMIT ?
         `, [limit]);
 
-        // Calculate estimated execution times (time between consecutive changesets)
         const executionData = changesets.map((changeset, index) => {
             let executionTimeSeconds = 0;
             
@@ -401,7 +554,7 @@ app.get('/api/monitoring/execution-times', async (req, res) => {
                 const nextTime = new Date(changesets[index + 1].DATEEXECUTED).getTime();
                 executionTimeSeconds = Math.abs(currentTime - nextTime) / 1000;
             } else {
-                executionTimeSeconds = 2; // Default for last changeset
+                executionTimeSeconds = 2;
             }
 
             return {
@@ -428,7 +581,6 @@ app.get('/api/monitoring/execution-times', async (req, res) => {
     }
 });
 
-// 🆕 GET /api/monitoring/author-stats - Track who made changes
 app.get('/api/monitoring/author-stats', async (req, res) => {
     const env = req.query.env || 'all';
 
@@ -436,24 +588,19 @@ app.get('/api/monitoring/author-stats', async (req, res) => {
         let authorStats = [];
 
         if (env === 'all') {
-            // Aggregate from all environments
             const [devAuthors] = await pools.dev.query(`
                 SELECT AUTHOR, COUNT(*) as count, MAX(DATEEXECUTED) as lastChange
-                FROM DATABASECHANGELOG 
-                GROUP BY AUTHOR
+                FROM DATABASECHANGELOG GROUP BY AUTHOR
             `);
             const [qaAuthors] = await pools.qa.query(`
                 SELECT AUTHOR, COUNT(*) as count, MAX(DATEEXECUTED) as lastChange
-                FROM DATABASECHANGELOG 
-                GROUP BY AUTHOR
+                FROM DATABASECHANGELOG GROUP BY AUTHOR
             `);
             const [prodAuthors] = await pools.prod.query(`
                 SELECT AUTHOR, COUNT(*) as count, MAX(DATEEXECUTED) as lastChange
-                FROM DATABASECHANGELOG 
-                GROUP BY AUTHOR
+                FROM DATABASECHANGELOG GROUP BY AUTHOR
             `);
 
-            // Combine and aggregate
             const allAuthors = [...devAuthors, ...qaAuthors, ...prodAuthors];
             const authorMap = {};
 
@@ -510,7 +657,6 @@ app.get('/api/monitoring/author-stats', async (req, res) => {
     }
 });
 
-// 🆕 GET /api/monitoring/deployment-frequency - Deployment frequency metrics
 app.get('/api/monitoring/deployment-frequency', async (req, res) => {
     const days = parseInt(req.query.days) || 30;
 
@@ -562,7 +708,6 @@ app.get('/api/monitoring/deployment-frequency', async (req, res) => {
     }
 });
 
-// 🆕 GET /api/monitoring/success-rate - Success/failure statistics
 app.get('/api/monitoring/success-rate', async (req, res) => {
     const env = req.query.env || 'all';
 
@@ -579,9 +724,7 @@ app.get('/api/monitoring/success-rate', async (req, res) => {
             if (!pool) continue;
 
             const [stats] = await pool.query(`
-                SELECT 
-                    EXECTYPE,
-                    COUNT(*) as count
+                SELECT EXECTYPE, COUNT(*) as count
                 FROM DATABASECHANGELOG
                 GROUP BY EXECTYPE
             `);
@@ -618,14 +761,12 @@ app.get('/api/monitoring/success-rate', async (req, res) => {
     }
 });
 
-// 🆕 GET /api/monitoring/audit-trail - Complete audit trail
 app.get('/api/monitoring/audit-trail', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const env = req.query.env || 'all';
 
     try {
         let auditEntries = [];
-
         const envList = env === 'all' ? ['dev', 'qa', 'prod'] : [env];
 
         for (const envName of envList) {
@@ -634,14 +775,8 @@ app.get('/api/monitoring/audit-trail', async (req, res) => {
 
             const [entries] = await pool.query(`
                 SELECT 
-                    ID,
-                    AUTHOR,
-                    FILENAME,
-                    DATEEXECUTED,
-                    ORDEREXECUTED,
-                    EXECTYPE,
-                    DESCRIPTION,
-                    DEPLOYMENT_ID
+                    ID, AUTHOR, FILENAME, DATEEXECUTED,
+                    ORDEREXECUTED, EXECTYPE, DESCRIPTION, DEPLOYMENT_ID
                 FROM DATABASECHANGELOG
                 ORDER BY DATEEXECUTED DESC
                 LIMIT ?
@@ -653,7 +788,6 @@ app.get('/api/monitoring/audit-trail', async (req, res) => {
             })));
         }
 
-        // Sort by date and limit
         auditEntries.sort((a, b) => new Date(b.DATEEXECUTED) - new Date(a.DATEEXECUTED));
         auditEntries = auditEntries.slice(0, limit);
 
@@ -677,28 +811,9 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
     console.log(`
 ╔════════════════════════════════════════════════════════════╗
-║                                                            ║
 ║     🗄️  Liquibase API Server Running                       ║
-║                                                            ║
 ║     Port: ${PORT}                                          ║
-║     Environment: ${process.env.NODE_ENV || 'development'}                              ║
-║                                                            ║
-║     📊 Monitoring Endpoints (NEW):                         ║
-║     • GET  /api/monitoring/execution-times?env=dev         ║
-║     • GET  /api/monitoring/author-stats?env=all            ║
-║     • GET  /api/monitoring/deployment-frequency?days=30    ║
-║     • GET  /api/monitoring/success-rate?env=all            ║
-║     • GET  /api/monitoring/audit-trail?env=all&limit=50    ║
-║                                                            ║
-║     📋 Standard Endpoints:                                 ║
-║     • GET  /api/environments                               ║
-║     • GET  /api/migrations/history?env=dev&limit=10        ║
-║     • GET  /api/database/status?env=dev                    ║
-║     • GET  /api/migrations/diff?env1=dev&env2=prod         ║
-║     • GET  /api/stats                                      ║
-║     • POST /api/migrations/rollback                        ║
-║     • GET  /health                                         ║
-║                                                            ║
+║     Status: ✅ READY                                        ║
 ╚════════════════════════════════════════════════════════════╝
     `);
 });
