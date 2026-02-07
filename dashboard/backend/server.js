@@ -1035,11 +1035,28 @@ app.post('/api/migrations/execute', async (req, res) => {
             warnings: stderr || ''
         });
     } catch (error) {
+        // Extract meaningful error message from stderr if available
+        let errorMessage = error.message;
+        if (error.stderr) {
+            // Try to extract the main error reason from Liquibase output
+            const reasonMatch = error.stderr.match(/ERROR: Exception Primary Reason:\s*(.+)/);
+            if (reasonMatch) {
+                errorMessage = reasonMatch[1].trim();
+            } else {
+                // Fallback to first SEVERE or ERROR line
+                const severeMatch = error.stderr.match(/\[SEVERE\].+?Exception[^\n]*(.+?)(?:\n|$)/s);
+                if (severeMatch) {
+                    errorMessage = severeMatch[1].trim();
+                }
+            }
+        }
+        
         res.status(500).json({
             success: false,
-            error: error.message,
+            error: errorMessage,
             stdout: error.stdout || '',
-            stderr: error.stderr || ''
+            stderr: error.stderr || '',
+            fullError: error.message
         });
     }
 });

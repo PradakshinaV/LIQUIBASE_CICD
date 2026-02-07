@@ -310,47 +310,103 @@
             const btn = document.getElementById('refreshBtn');
             btn.disabled = true;
             
+            // First check if API server is reachable
+            let apiReachable = false;
             try {
-                await Promise.all([
+                const healthCheck = await fetch(`${API_BASE.replace('/api', '')}/health`);
+                if (healthCheck.ok) {
+                    apiReachable = true;
+                }
+            } catch (e) {
+                console.error('API server health check failed:', e);
+            }
+            
+            if (!apiReachable) {
+                updateConnectionStatus(false, 'API server not reachable. Is the backend running on port 3000?');
+                document.getElementById('lastUpdateTime').textContent = 'Connection failed';
+                document.getElementById('envGrid').innerHTML = `
+                    <div class="error-message" style="padding: 20px; text-align: center;">
+                        <h3>⚠️ Cannot Connect to API Server</h3>
+                        <p><strong>Error:</strong> API server not reachable at ${API_BASE.replace('/api', '')}</p>
+                        <p style="margin-top: 15px;"><strong>Troubleshooting Steps:</strong></p>
+                        <ol style="text-align: left; display: inline-block; margin-top: 10px;">
+                            <li>Make sure the backend server is running:<br>
+                                <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px;">cd dashboard/backend && npm start</code>
+                            </li>
+                            <li>Verify the server is running on port 3000</li>
+                            <li>Check the API URL: <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px;">${API_BASE}</code></li>
+                            <li>Check browser console (F12) for detailed errors</li>
+                        </ol>
+                    </div>
+                `;
+                btn.disabled = false;
+                return;
+            }
+            
+            try {
+                const results = await Promise.allSettled([
                     loadEnvironments(),
                     loadStats(),
                     loadHistory()
                 ]);
                 
-                updateConnectionStatus(true);
-                document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
+                // Check if at least one succeeded
+                const hasSuccess = results.some(r => r.status === 'fulfilled');
+                
+                if (hasSuccess) {
+                    updateConnectionStatus(true);
+                    document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
+                } else {
+                    updateConnectionStatus(false, 'Failed to load data from API');
+                }
             } catch (error) {
                 console.error('Error refreshing data:', error);
-                updateConnectionStatus(false);
+                updateConnectionStatus(false, error.message || 'Unknown error');
             } finally {
                 btn.disabled = false;
             }
         }
 
-        function updateConnectionStatus(connected) {
+        function updateConnectionStatus(connected, errorMessage = '') {
             const statusEl = document.getElementById('connectionStatus');
             if (connected) {
                 statusEl.className = 'connection-status connected';
                 statusEl.innerHTML = '<span class="status-dot green"></span><span>Connected</span>';
+                statusEl.title = 'Connected to API server';
             } else {
                 statusEl.className = 'connection-status disconnected';
-                statusEl.innerHTML = '<span class="status-dot red"></span><span>Disconnected</span>';
+                const message = errorMessage || 'Disconnected';
+                statusEl.innerHTML = `<span class="status-dot red"></span><span>Disconnected</span>`;
+                statusEl.title = message + '\n\nTroubleshooting:\n1. Check if backend server is running: npm start in dashboard/backend\n2. Verify API_BASE URL: ' + API_BASE + '\n3. Check browser console for errors';
             }
         }
 
         async function loadEnvironments() {
             try {
                 const response = await fetch(`${API_BASE}/environments`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
                 
                 if (data.success) {
                     environmentsData = data.environments;
                     renderEnvironments(data.environments);
+                } else {
+                    throw new Error(data.error || 'Failed to load environments');
                 }
             } catch (error) {
                 console.error('Error loading environments:', error);
+                const errorMsg = error.message || 'Failed to load environment data';
                 document.getElementById('envGrid').innerHTML = 
-                    '<div class="error-message">Failed to load environment data</div>';
+                    `<div class="error-message">
+                        <strong>Failed to load environment data</strong><br>
+                        <small>${errorMsg}</small><br>
+                        <small style="color: #666;">Check if backend server is running on ${API_BASE.replace('/api', '')}</small>
+                    </div>`;
+                throw error; // Re-throw so Promise.allSettled can catch it
             }
         }
 
@@ -533,22 +589,32 @@
         }
 
         async function loadHistory() {
+            // This function is kept for compatibility but doesn't render to a specific element
+            // The timeline is loaded separately via loadMigrationTimeline() when the overview tab is active
             try {
                 const response = await fetch(`${API_BASE}/migrations/history?env=dev&limit=5`);
                 const data = await response.json();
                 
                 if (data.success) {
-                    renderTimeline(data.history);
+                    // History loaded successfully, but we don't render it here
+                    // It's rendered in loadMigrationTimeline() when needed
+                    return;
                 }
             } catch (error) {
                 console.error('Error loading history:', error);
-                document.getElementById('timeline').innerHTML = 
-                    '<div class="error-message">Failed to load migration history</div>';
+                // Don't try to render to a non-existent element
             }
         }
 
         function renderTimeline(history) {
+            // This function is deprecated - use renderTimelineForTab instead
+            // Keeping for backward compatibility but it won't render anything
             const timeline = document.getElementById('timeline');
+            if (!timeline) {
+                // Element doesn't exist, which is expected in the new structure
+                return;
+            }
+            
             timeline.innerHTML = '';
 
             if (!history || history.length === 0) {
@@ -950,6 +1016,59 @@ function cancelRollback() {
         let showModal = false;
         let modalContent = null;
 
+        // Helper function to escape HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Event handler for pending migration button clicks (using event delegation)
+        // Made global so it can be called from onclick attribute
+        window.handlePendingMigrationClick = function(e) {
+            const btn = e.target.closest('.run-migration-btn');
+            if (!btn || btn.disabled) {
+                return;
+            }
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            console.log('Pending migration button clicked', btn);
+            
+            const container = document.getElementById('pendingMigrations');
+            if (!container || !container.dataset.pendingMigrations) {
+                console.error('Pending migrations data not found');
+                alert('Error: Migration data not found. Please refresh the page.');
+                return;
+            }
+            
+            try {
+                const index = parseInt(btn.dataset.migrationIndex);
+                if (isNaN(index)) {
+                    console.error('Invalid migration index:', btn.dataset.migrationIndex);
+                    return;
+                }
+                
+                const migrations = JSON.parse(container.dataset.pendingMigrations);
+                const migration = migrations[index];
+                
+                if (migration) {
+                    console.log('Button clicked, running migration:', migration);
+                    runMigration(migration);
+                } else {
+                    console.error('Migration not found at index:', index, 'Available migrations:', migrations);
+                    alert('Error: Migration not found. Please refresh the page.');
+                }
+            } catch (error) {
+                console.error('Error handling migration click:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+        
+        // runMigration will be defined later, we'll make it globally accessible there
+
         async function loadPendingMigrations() {
             const container = document.getElementById('pendingMigrations');
             if (!container) return;
@@ -962,7 +1081,19 @@ function cancelRollback() {
                 
                 if (data.success) {
                     if (data.pending && data.pending.length > 0) {
-                        container.innerHTML = data.pending.map(migration => `
+                        // Store migrations data first
+                        container.dataset.pendingMigrations = JSON.stringify(data.pending);
+                        
+                        // Remove old listener if it exists, then add new one (event delegation)
+                        const newHandler = handlePendingMigrationClick;
+                        const oldHandler = container._pendingMigrationHandler;
+                        if (oldHandler) {
+                            container.removeEventListener('click', oldHandler);
+                        }
+                        container.addEventListener('click', newHandler);
+                        container._pendingMigrationHandler = newHandler;
+                        
+                        container.innerHTML = data.pending.map((migration, index) => `
                             <div class="pending-migration-item" style="margin-bottom: 12px; padding: 12px; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9;">
                                 <div style="margin-bottom: 8px;">
                                     <strong style="color: #333;">${migration.id}</strong>
@@ -972,8 +1103,15 @@ function cancelRollback() {
                                     File: ${migration.filename}
                                 </div>
                                 <button 
-                                    onclick="runMigration(${JSON.stringify(migration).replace(/"/g, '&quot;')})" 
-                                    disabled="${runningMigration === migration.id}"
+                                    type="button"
+                                    class="run-migration-btn"
+                                    data-migration-index="${index}"
+                                    data-migration-id="${escapeHtml(migration.id)}"
+                                    data-migration-author="${escapeHtml(migration.author || '')}"
+                                    data-migration-filename="${escapeHtml(migration.filename || '')}"
+                                    data-migration-description="${escapeHtml(migration.description || '')}"
+                                    ${runningMigration === migration.id ? 'disabled' : ''}
+                                    onclick="handlePendingMigrationClick(event)"
                                     style="padding: 6px 12px; background-color: ${runningMigration === migration.id ? '#ccc' : '#007bff'}; color: white; border: none; border-radius: 4px; cursor: ${runningMigration === migration.id ? 'not-allowed' : 'pointer'};"
                                 >
                                     ${runningMigration === migration.id ? 'Running...' : 'Run'}
@@ -997,7 +1135,12 @@ function cancelRollback() {
         }
 
         async function runMigration(migration) {
-            if (!migration) return;
+            if (!migration) {
+                console.error('runMigration called with no migration object');
+                return;
+            }
+            
+            console.log('Running migration:', migration);
             
             const confirmMsg = `Execute migration "${migration.id}" (${migration.description || migration.filename}) on ${selectedEnv.toUpperCase()}?`;
             if (!window.confirm(confirmMsg)) return;
@@ -1011,6 +1154,8 @@ function cancelRollback() {
                     changelogFile = `changelogs/${changelogFile}`;
                 }
                 
+                console.log('Calling API:', `${API_BASE}/migrations/execute`, { env: selectedEnv, changelogFile: changelogFile });
+                
                 const response = await fetch(`${API_BASE}/migrations/execute`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1018,6 +1163,13 @@ function cancelRollback() {
                 });
                 
                 const r = await response.json();
+                
+                if (!response.ok || !r.success) {
+                    // Create an error object with response data
+                    const error = new Error(r.error || `HTTP ${response.status}: ${response.statusText}`);
+                    error.response = { data: r };
+                    throw error;
+                }
                 
                 if (r.success) {
                     const output = r.output || '';
@@ -1036,21 +1188,52 @@ function cancelRollback() {
                     throw new Error(r.error || 'Migration failed');
                 }
             } catch (error) {
-                const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
-                const errorOutput = error.response?.data?.stdout || '';
-                const errorStderr = error.response?.data?.stderr || '';
-                const fullError = errorOutput || errorStderr ? 
-                    `${errorMsg}\n\n--- Output ---\n${errorOutput}\n\n--- Error Details ---\n${errorStderr}` : 
-                    errorMsg;
+                console.error('Migration error:', error);
+                let errorMsg = error.message || 'Unknown error';
+                let errorOutput = '';
+                let errorStderr = '';
+                
+                // Try to extract error details from response
+                if (error.response && error.response.data) {
+                    const errorData = error.response.data;
+                    errorMsg = errorData.error || errorMsg;
+                    errorOutput = errorData.stdout || '';
+                    errorStderr = errorData.stderr || '';
+                } else if (error.message && error.message.includes('fetch')) {
+                    // Network error
+                    errorMsg = 'Network error: Could not connect to API server. Please check if the backend is running.';
+                }
+                
+                // Parse Liquibase error output to extract key information
+                let parsedError = errorMsg;
+                if (errorStderr) {
+                    // Extract the main error reason from Liquibase output
+                    const reasonMatch = errorStderr.match(/ERROR: Exception Primary Reason:\s*(.+)/);
+                    const classMatch = errorStderr.match(/ERROR: Exception Primary Class:\s*(.+)/);
+                    const sourceMatch = errorStderr.match(/ERROR: Exception Primary Source:\s*(.+)/);
+                    
+                    if (reasonMatch || classMatch) {
+                        parsedError = `❌ Migration Failed\n\n`;
+                        if (reasonMatch) parsedError += `Reason: ${reasonMatch[1]}\n`;
+                        if (classMatch) parsedError += `Error Type: ${classMatch[1]}\n`;
+                        if (sourceMatch) parsedError += `Database: ${sourceMatch[1]}\n`;
+                        parsedError += `\n--- Full Error Details ---\n${errorStderr}`;
+                    } else {
+                        parsedError = errorStderr;
+                    }
+                } else if (errorOutput) {
+                    parsedError = errorOutput;
+                }
                 
                 showModalDialog(
                     `Migration "${migration.id}" failed`,
-                    fullError,
+                    parsedError,
                     true
                 );
+            } finally {
+                runningMigration = null;
+                await loadPendingMigrations();
             }
-            runningMigration = null;
-            await loadPendingMigrations();
         }
 
         // Migration Timeline with search and rollback functionality
@@ -1152,7 +1335,11 @@ function cancelRollback() {
                             ${h.MD5SUM ? `<div style="margin-top: 4px;"><strong>MD5:</strong> ${h.MD5SUM}</div>` : ''}
                             <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
                                 <button
-                                    onclick="event.stopPropagation(); handleRollback(${JSON.stringify(h).replace(/"/g, '&quot;')})"
+                                    class="rollback-changeset-btn"
+                                    data-changeset-id="${h.ID}"
+                                    data-changeset-author="${h.AUTHOR || ''}"
+                                    data-changeset-filename="${h.FILENAME || ''}"
+                                    data-changeset-order="${h.ORDEREXECUTED || ''}"
                                     disabled="${rollingBackId === h.ID}"
                                     style="padding: 6px 12px; background-color: ${rollingBackId === h.ID ? '#ccc' : '#dc3545'}; color: white; border: none; border-radius: 4px; cursor: ${rollingBackId === h.ID ? 'not-allowed' : 'pointer'}; font-size: 12px; font-weight: bold;"
                                 >
@@ -1167,6 +1354,22 @@ function cancelRollback() {
             });
             
             container.appendChild(list);
+            
+            // Store history data for later use
+            container.dataset.migrationHistory = JSON.stringify(filteredHistory);
+            
+            // Add event listeners to rollback buttons
+            container.querySelectorAll('.rollback-changeset-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const history = JSON.parse(container.dataset.migrationHistory);
+                    const migration = history.find(m => m.ID === this.dataset.changesetId);
+                    if (migration) {
+                        handleRollback(migration);
+                    }
+                });
+            });
         }
 
         function toggleExpand(orderExecuted) {
@@ -1184,7 +1387,12 @@ function cancelRollback() {
         }
 
         async function handleRollback(migration) {
-            if (!migration) return;
+            if (!migration) {
+                console.error('handleRollback called with no migration object');
+                return;
+            }
+            
+            console.log('Rolling back migration:', migration);
             
             const confirmMsg = `Are you sure you want to rollback changeset "${migration.ID}" in ${selectedEnv.toUpperCase()}?\n\nThis action cannot be undone.`;
             if (!window.confirm(confirmMsg)) return;
@@ -1193,6 +1401,13 @@ function cancelRollback() {
             await loadMigrationTimeline();
             
             try {
+                console.log('Calling API:', `${API_BASE}/migrations/rollback-one`, {
+                    env: selectedEnv,
+                    changesetId: migration.ID,
+                    author: migration.AUTHOR,
+                    filename: migration.FILENAME
+                });
+                
                 const response = await fetch(`${API_BASE}/migrations/rollback-one`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1203,6 +1418,11 @@ function cancelRollback() {
                         filename: migration.FILENAME
                     })
                 });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}: ${response.statusText}` }));
+                    throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+                }
                 
                 const r = await response.json();
                 
@@ -1223,9 +1443,23 @@ function cancelRollback() {
                     throw new Error(r.error || 'Rollback failed');
                 }
             } catch (error) {
-                const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
-                const errorOutput = error.response?.data?.stdout || '';
-                const errorStderr = error.response?.data?.stderr || '';
+                console.error('Rollback error:', error);
+                let errorMsg = error.message || 'Unknown error';
+                let errorOutput = '';
+                let errorStderr = '';
+                
+                // Try to extract error details if available
+                if (error.response) {
+                    try {
+                        const errorData = await error.response.json();
+                        errorMsg = errorData.error || errorMsg;
+                        errorOutput = errorData.stdout || '';
+                        errorStderr = errorData.stderr || '';
+                    } catch (e) {
+                        // Ignore JSON parse errors
+                    }
+                }
+                
                 const fullError = errorOutput || errorStderr ? 
                     `${errorMsg}\n\n--- Output ---\n${errorOutput}\n\n--- Error Details ---\n${errorStderr}` : 
                     errorMsg;
@@ -1235,9 +1469,10 @@ function cancelRollback() {
                     fullError,
                     true
                 );
+            } finally {
+                rollingBackId = null;
+                await loadMigrationTimeline();
             }
-            rollingBackId = null;
-            await loadMigrationTimeline();
         }
 
         // Metrics Dashboard
