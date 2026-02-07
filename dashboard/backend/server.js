@@ -6,6 +6,7 @@ const path = require('path');
 const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
+const xml2js = require('xml2js');
 require('dotenv').config();
 
 const app = express();
@@ -46,10 +47,45 @@ const pools = {
     })
 };
 
+// Helper function to check if DATABASECHANGELOG table exists
+async function tableExists(connection, tableName = 'DATABASECHANGELOG') {
+    try {
+        const [tables] = await connection.query(`
+            SELECT TABLE_NAME 
+            FROM information_schema.TABLES 
+            WHERE TABLE_SCHEMA = DATABASE() 
+            AND TABLE_NAME = ?
+        `, [tableName]);
+        return tables.length > 0;
+    } catch (error) {
+        return false;
+    }
+}
+
 // Helper function to get database info
 async function getDatabaseInfo(pool, envName) {
     try {
         const connection = await pool.getConnection();
+        
+        const [dbName] = await connection.query(`SELECT DATABASE() as dbname`);
+        
+        // Check if DATABASECHANGELOG table exists
+        const changelogExists = await tableExists(connection);
+        
+        // If table doesn't exist, return uninitialized state
+        if (!changelogExists) {
+            connection.release();
+            return {
+                environment: envName,
+                status: 'uninitialized',
+                error: 'DATABASECHANGELOG table does not exist. Run Liquibase update to initialize.',
+                currentVersion: 'Not initialized',
+                changesetsApplied: 0,
+                lastUpdated: null,
+                database: dbName[0].dbname,
+                latestChangeset: null
+            };
+        }
         
         const [changesets] = await connection.query(`
             SELECT ID, AUTHOR, FILENAME, DATEEXECUTED, DESCRIPTION, ORDEREXECUTED
@@ -61,8 +97,6 @@ async function getDatabaseInfo(pool, envName) {
         const [countResult] = await connection.query(`
             SELECT COUNT(*) as total FROM DATABASECHANGELOG
         `);
-
-        const [dbName] = await connection.query(`SELECT DATABASE() as dbname`);
 
         connection.release();
 
@@ -151,7 +185,20 @@ app.get('/api/migrations/history', async (req, res) => {
             });
         }
 
-        const [changesets] = await pool.query(`
+        const connection = await pool.getConnection();
+        const changelogExists = await tableExists(connection);
+        
+        if (!changelogExists) {
+            connection.release();
+            return res.json({
+                success: true,
+                environment: env,
+                history: [],
+                message: 'DATABASECHANGELOG table does not exist. Run Liquibase update to initialize.'
+            });
+        }
+
+        const [changesets] = await connection.query(`
             SELECT 
                 ID, AUTHOR, FILENAME, DATEEXECUTED, ORDEREXECUTED,
                 EXECTYPE, MD5SUM, DESCRIPTION, COMMENTS, TAG,
@@ -160,6 +207,8 @@ app.get('/api/migrations/history', async (req, res) => {
             ORDER BY DATEEXECUTED DESC 
             LIMIT ?
         `, [limit]);
+        
+        connection.release();
 
         res.json({
             success: true,
@@ -168,6 +217,143 @@ app.get('/api/migrations/history', async (req, res) => {
             history: changesets
         });
     } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Helper function to parse changelog XML and extract changesets
+async function parseChangelogFile(filePath) {
+    try {
+        const xmlContent = fs.readFileSync(filePath, 'utf8');
+        const parser = new xml2js.Parser();
+        const result = await parser.parseStringPromise(xmlContent);
+        
+        const changesets = [];
+        if (result.databaseChangeLog && result.databaseChangeLog.changeSet) {
+            const changeSetArray = Array.isArray(result.databaseChangeLog.changeSet) 
+                ? result.databaseChangeLog.changeSet 
+                : [result.databaseChangeLog.changeSet];
+            
+            changeSetArray.forEach(cs => {
+                changesets.push({
+                    id: cs.$.id,
+                    author: cs.$.author,
+                    filename: path.basename(filePath)
+                });
+            });
+        }
+        
+        return changesets;
+    } catch (error) {
+        console.error(`Error parsing ${filePath}:`, error.message);
+        return [];
+    }
+}
+
+// Helper function to get all changesets from master changelog
+async function getAllChangesetsFromMaster() {
+    // Use __dirname to get the directory of this file, then navigate to liquibase directory
+    const liquibaseDir = path.join(__dirname, '..', '..', 'liquibase');
+    const masterChangelogPath = path.join(liquibaseDir, 'changelogs', 'db.changelog-master.xml');
+    
+    if (!fs.existsSync(masterChangelogPath)) {
+        throw new Error(`Master changelog not found at ${masterChangelogPath}`);
+    }
+    
+    try {
+        const xmlContent = fs.readFileSync(masterChangelogPath, 'utf8');
+        const parser = new xml2js.Parser();
+        const result = await parser.parseStringPromise(xmlContent);
+        
+        const allChangesets = [];
+        
+        // Extract included files
+        if (result.databaseChangeLog && result.databaseChangeLog.include) {
+            const includeArray = Array.isArray(result.databaseChangeLog.include) 
+                ? result.databaseChangeLog.include 
+                : [result.databaseChangeLog.include];
+            
+            for (const include of includeArray) {
+                const fileAttr = include.$.file;
+                const relativeToChangelogFile = include.$.relativeToChangelogFile === 'true';
+                
+                let includedFilePath;
+                if (relativeToChangelogFile) {
+                    // Path relative to master changelog file location
+                    includedFilePath = path.join(path.dirname(masterChangelogPath), fileAttr);
+                } else {
+                    // Path relative to changelogs directory (same as above, but explicit)
+                    includedFilePath = path.join(path.dirname(masterChangelogPath), fileAttr);
+                }
+                
+                // Normalize path to handle any .. or . in the path
+                includedFilePath = path.normalize(includedFilePath);
+                
+                if (fs.existsSync(includedFilePath)) {
+                    const changesets = await parseChangelogFile(includedFilePath);
+                    allChangesets.push(...changesets);
+                } else {
+                    console.warn(`Included file not found: ${includedFilePath}`);
+                }
+            }
+        }
+        
+        return allChangesets;
+    } catch (error) {
+        console.error('Error parsing master changelog:', error.message);
+        throw error;
+    }
+}
+
+// Endpoint to get pending migrations
+app.get('/api/migrations/pending', async (req, res) => {
+    const env = req.query.env || 'dev';
+    
+    try {
+        const pool = pools[env];
+        if (!pool) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid environment'
+            });
+        }
+        
+        // Get all changesets from master changelog
+        const allChangesets = await getAllChangesetsFromMaster();
+        
+        // Get applied changesets from database
+        const connection = await pool.getConnection();
+        const changelogExists = await tableExists(connection);
+        
+        let appliedChangesetIds = [];
+        if (changelogExists) {
+            const [applied] = await connection.query(`
+                SELECT ID, AUTHOR FROM DATABASECHANGELOG
+            `);
+            appliedChangesetIds = applied.map(c => `${c.ID}:${c.AUTHOR}`);
+        }
+        
+        connection.release();
+        
+        // Find pending changesets (not in database)
+        const pending = allChangesets.filter(cs => {
+            const changesetKey = `${cs.id}:${cs.author}`;
+            return !appliedChangesetIds.includes(changesetKey);
+        });
+        
+        res.json({
+            success: true,
+            environment: env,
+            totalChangesets: allChangesets.length,
+            appliedCount: appliedChangesetIds.length,
+            pendingCount: pending.length,
+            pending: pending
+        });
+    } catch (error) {
+        console.error('Error getting pending migrations:', error);
         res.status(500).json({
             success: false,
             error: error.message
@@ -799,6 +985,344 @@ app.get('/api/monitoring/audit-trail', async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Execute single migration
+app.post('/api/migrations/execute', async (req, res) => {
+    const { env, changelogFile } = req.body;
+    
+    if (!env || !changelogFile) {
+        return res.status(400).json({
+            success: false,
+            error: 'Environment and changelogFile are required'
+        });
+    }
+
+    if (!['dev', 'qa', 'prod'].includes(env)) {
+        return res.status(400).json({
+            success: false,
+            error: 'Invalid environment'
+        });
+    }
+
+    const liquibaseDir = path.join(process.cwd(), '..', '..', 'liquibase');
+    const propsFile = path.join(liquibaseDir, `liquibase.${env}.properties`);
+    
+    if (!fs.existsSync(propsFile)) {
+        return res.status(500).json({
+            success: false,
+            error: `Liquibase properties file not found: ${propsFile}`
+        });
+    }
+
+    // Liquibase update applies all pending changesets from the master changelog
+    // The changelogFile parameter is for reference/logging, but the actual changelog
+    // is specified in the properties file
+    const liquibaseCmd = `liquibase --defaults-file=liquibase.${env}.properties update`;
+
+    try {
+        const { stdout, stderr } = await execPromise(liquibaseCmd, {
+            cwd: liquibaseDir,
+            timeout: 60000
+        });
+
+        res.json({
+            success: true,
+            environment: env,
+            changelogFile: changelogFile,
+            output: stdout || 'Migration executed successfully',
+            warnings: stderr || ''
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            stdout: error.stdout || '',
+            stderr: error.stderr || ''
+        });
+    }
+});
+
+// Rollback single changeset
+app.post('/api/migrations/rollback-one', async (req, res) => {
+    const { env, changesetId, author, filename } = req.body;
+    
+    if (!env || !changesetId || !author || !filename) {
+        return res.status(400).json({
+            success: false,
+            error: 'Environment, changesetId, author, and filename are required'
+        });
+    }
+
+    if (!['dev', 'qa', 'prod'].includes(env)) {
+        return res.status(400).json({
+            success: false,
+            error: 'Invalid environment'
+        });
+    }
+
+    const liquibaseDir = path.join(process.cwd(), '..', '..', 'liquibase');
+    const propsFile = path.join(liquibaseDir, `liquibase.${env}.properties`);
+    
+    if (!fs.existsSync(propsFile)) {
+        return res.status(500).json({
+            success: false,
+            error: `Liquibase properties file not found: ${propsFile}`
+        });
+    }
+
+    // Rollback to a tag or use rollback-count 1
+    const liquibaseCmd = `liquibase --defaults-file=liquibase.${env}.properties rollback-count 1`;
+
+    try {
+        const { stdout, stderr } = await execPromise(liquibaseCmd, {
+            cwd: liquibaseDir,
+            timeout: 30000
+        });
+
+        res.json({
+            success: true,
+            environment: env,
+            changesetId: changesetId,
+            output: stdout || 'Rollback executed successfully',
+            warnings: stderr || ''
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            stdout: error.stdout || '',
+            stderr: error.stderr || ''
+        });
+    }
+});
+
+// Get metrics
+app.get('/api/metrics', async (req, res) => {
+    try {
+        const [devInfo, qaInfo, prodInfo] = await Promise.all([
+            getDatabaseInfo(pools.dev, 'dev'),
+            getDatabaseInfo(pools.qa, 'qa'),
+            getDatabaseInfo(pools.prod, 'prod')
+        ]);
+
+        // Get all changesets from master changelog
+        const allChangesets = await getAllChangesetsFromMaster();
+        const totalMigrations = allChangesets.length;
+
+        // Get applied counts per environment
+        const appliedPerEnv = {
+            dev: devInfo.changesetsApplied || 0,
+            qa: qaInfo.changesetsApplied || 0,
+            prod: prodInfo.changesetsApplied || 0
+        };
+
+        // Calculate pending per environment
+        const pendingPerEnv = {
+            dev: Math.max(0, totalMigrations - appliedPerEnv.dev),
+            qa: Math.max(0, totalMigrations - appliedPerEnv.qa),
+            prod: Math.max(0, totalMigrations - appliedPerEnv.prod)
+        };
+
+        // Get rollback count (EXECTYPE = 'ROLLBACK')
+        let rollbacksExecuted = 0;
+        for (const pool of [pools.dev, pools.qa, pools.prod]) {
+            try {
+                const connection = await pool.getConnection();
+                const changelogExists = await tableExists(connection);
+                if (changelogExists) {
+                    const [rollbacks] = await connection.query(`
+                        SELECT COUNT(*) as count FROM DATABASECHANGELOG 
+                        WHERE EXECTYPE = 'ROLLBACK'
+                    `);
+                    rollbacksExecuted += rollbacks[0].count || 0;
+                }
+                connection.release();
+            } catch (e) {
+                // Ignore errors
+            }
+        }
+
+        res.json({
+            success: true,
+            totalMigrations,
+            appliedPerEnv,
+            pendingPerEnv,
+            rollbacksExecuted
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Get recent deployments
+app.get('/api/deployments/recent', async (req, res) => {
+    const limit = parseInt(req.query.limit) || 10;
+
+    try {
+        let allDeployments = [];
+
+        for (const [envName, pool] of Object.entries(pools)) {
+            try {
+                const connection = await pool.getConnection();
+                const changelogExists = await tableExists(connection);
+                
+                if (changelogExists) {
+                    const [deployments] = await connection.query(`
+                        SELECT 
+                            ID, AUTHOR, FILENAME, DATEEXECUTED,
+                            DESCRIPTION, EXECTYPE
+                        FROM DATABASECHANGELOG
+                        WHERE EXECTYPE = 'EXECUTED'
+                        ORDER BY DATEEXECUTED DESC
+                        LIMIT ?
+                    `, [limit]);
+                    
+                    allDeployments.push(...deployments.map(d => ({
+                        ...d,
+                        env: envName,
+                        status: 'success'
+                    })));
+                }
+                connection.release();
+            } catch (e) {
+                // Ignore errors
+            }
+        }
+
+        // Sort by date and limit
+        allDeployments.sort((a, b) => new Date(b.DATEEXECUTED) - new Date(a.DATEEXECUTED));
+        allDeployments = allDeployments.slice(0, limit);
+
+        res.json({
+            success: true,
+            deployments: allDeployments.map(d => ({
+                id: d.ID,
+                author: d.AUTHOR,
+                filename: d.FILENAME,
+                dateexecuted: d.DATEEXECUTED,
+                description: d.DESCRIPTION,
+                env: d.env,
+                status: d.status
+            }))
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Get rollback history
+app.get('/api/rollbacks/history', async (req, res) => {
+    const env = req.query.env;
+
+    try {
+        const envList = env ? [env] : ['dev', 'qa', 'prod'];
+        const rollbackHistory = {};
+
+        for (const envName of envList) {
+            const pool = pools[envName];
+            if (!pool) continue;
+
+            try {
+                const connection = await pool.getConnection();
+                const changelogExists = await tableExists(connection);
+                
+                if (changelogExists) {
+                    const [rollbacks] = await connection.query(`
+                        SELECT 
+                            ID as changeset_id, AUTHOR, FILENAME, 
+                            DATEEXECUTED as rolled_back_at, TAG as rollback_tag,
+                            EXECTYPE as status
+                        FROM DATABASECHANGELOG
+                        WHERE EXECTYPE = 'ROLLBACK'
+                        ORDER BY DATEEXECUTED DESC
+                    `);
+                    
+                    rollbackHistory[envName] = rollbacks.map(r => ({
+                        changeset_id: r.changeset_id,
+                        author: r.AUTHOR,
+                        filename: r.FILENAME,
+                        rolled_back_at: r.rolled_back_at,
+                        rollback_tag: r.rollback_tag,
+                        status: r.status || 'SUCCESS',
+                        env: envName
+                    }));
+                }
+                connection.release();
+            } catch (e) {
+                rollbackHistory[envName] = [];
+            }
+        }
+
+        res.json({
+            success: true,
+            ...rollbackHistory
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Get version map (comparison matrix)
+app.get('/api/version-map', async (req, res) => {
+    try {
+        // Get all changesets from master changelog
+        const allChangesets = await getAllChangesetsFromMaster();
+        
+        // Get applied changesets per environment
+        const envChangesets = {};
+        for (const [envName, pool] of Object.entries(pools)) {
+            try {
+                const connection = await pool.getConnection();
+                const changelogExists = await tableExists(connection);
+                
+                if (changelogExists) {
+                    const [applied] = await connection.query(`
+                        SELECT ID, AUTHOR FROM DATABASECHANGELOG
+                    `);
+                    envChangesets[envName] = applied.map(c => `${c.ID}:${c.AUTHOR}`);
+                } else {
+                    envChangesets[envName] = [];
+                }
+                connection.release();
+            } catch (e) {
+                envChangesets[envName] = [];
+            }
+        }
+
+        // Build version map
+        const versionMap = allChangesets.map(cs => {
+            const changesetKey = `${cs.id}:${cs.author}`;
+            return {
+                changeset: cs.id,
+                author: cs.author,
+                description: cs.description || cs.filename,
+                filename: cs.filename,
+                dev: envChangesets.dev.includes(changesetKey),
+                qa: envChangesets.qa.includes(changesetKey),
+                prod: envChangesets.prod.includes(changesetKey)
+            };
+        });
+
+        res.json({
+            success: true,
+            versionMap
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
     }
 });
 
