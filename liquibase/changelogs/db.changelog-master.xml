@@ -8,6 +8,8 @@
 
     <include file="v1.0/001-create-users.xml" relativeToChangelogFile="true"/>
     <include file="v1.0/002-insert-users.xml" relativeToChangelogFile="true"/>
+        <include file="v1.0/003-add-phone.xml" relativeToChangelogFile="true"/>
+
     <!-- Removed 003-add-email-column.xml as email column already exists in 001 -->
 
 </databaseChangeLog>
