@@ -15,6 +15,7 @@
                 <where>name = 'PIPELINE CHECK'</where>
             </delete>
         </rollback>
+        
     </changeSet>
 
 </databaseChangeLog>
