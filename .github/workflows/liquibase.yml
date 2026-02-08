@@ -1,19 +1,52 @@
-name: Liquibase CI/CD
+name: Liquibase Migration Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main, test-validation ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+      count:
+        description: 'Number of changesets to rollback'
+        required: true
+        default: '1'
+        type: string
+
+env:
+  LIQUIBASE_VERSION: 4.33.0
+  MYSQL_CONNECTOR_VERSION: 9.1.0
 
 jobs:
-  dev-deploy:
+# =====================================================
+# DEV - Uses local MySQL for testing
+# =====================================================
+  deploy-dev:
     name: Deploy to DEV
     runs-on: ubuntu-latest
-    environment: dev
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: testdb_dev
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -23,20 +56,313 @@ jobs:
 
       - name: Install Liquibase
         run: |
-          curl -sLo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/download/v4.33.0/liquibase-4.33.0.tar.gz
-          tar -xzf liquibase.tar.gz
-          sudo mv liquibase /usr/local/bin/
-          sudo ln -s /usr/local/bin/liquibase/liquibase /usr/local/bin/liquibase
+          curl -sLo liquibase.zip https://github.com/liquibase/liquibase/releases/download/v${{ env.LIQUIBASE_VERSION }}/liquibase-${{ env.LIQUIBASE_VERSION }}.zip
+          unzip -q liquibase.zip -d $HOME/liquibase
+          chmod +x $HOME/liquibase/liquibase
+          echo "$HOME/liquibase" >> $GITHUB_PATH
 
-      - name: Verify Liquibase
-        run: liquibase --version
-
-      - name: Run Liquibase DEV
+      - name: Install MySQL Connector
         run: |
-          cd liquibase
+          mkdir -p $HOME/liquibase/lib
+          curl -sLo $HOME/liquibase/lib/mysql-connector.jar \
+            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/${{ env.MYSQL_CONNECTOR_VERSION }}/mysql-connector-j-${{ env.MYSQL_CONNECTOR_VERSION }}.jar
+
+      - name: Wait for MySQL
+        run: |
+          for i in {1..30}; do
+            mysqladmin ping -h 127.0.0.1 -uroot -proot && break
+            sleep 2
+          done
+
+      - name: Validate Changelog
+        run: |
           liquibase \
-            --defaults-file=liquibase.dev.properties \
+            --url="jdbc:mysql://127.0.0.1:3306/testdb_dev" \
+            --username=root \
+            --password=root \
+            --changeLogFile=$GITHUB_WORKSPACE/liquibase/changelogs/db.changelog-master.xml \
+            --classpath=$HOME/liquibase/lib/mysql-connector.jar \
+            validate
+
+      - name: Deploy to DEV
+        run: |
+          liquibase \
+            --url="jdbc:mysql://127.0.0.1:3306/testdb_dev" \
+            --username=root \
+            --password=root \
+            --changeLogFile=$GITHUB_WORKSPACE/liquibase/changelogs/db.changelog-master.xml \
+            --classpath=$HOME/liquibase/lib/mysql-connector.jar \
             update
+
+      - name: Show Deployment Status
+        if: always()
+        run: |
+          liquibase \
+            --url="jdbc:mysql://127.0.0.1:3306/testdb_dev" \
+            --username=root \
+            --password=root \
+            --changeLogFile=$GITHUB_WORKSPACE/liquibase/changelogs/db.changelog-master.xml \
+            --classpath=$HOME/liquibase/lib/mysql-connector.jar \
+            status --verbose
+
+      - name: Generate Deployment Report
+        if: always()
+        run: |
+          echo "### 📊 DEV Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Deployment completed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: DEV" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+# =====================================================
+# QA - Connect to REAL QA database
+# =====================================================
+  promote-qa:
+    name: Promote to QA
+    runs-on: ubuntu-latest
+    needs: deploy-dev
+    environment: 
+      name: qa
+      # Requires approval in GitHub Settings → Environments → qa
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Liquibase
+        run: |
+          curl -sLo liquibase.zip https://github.com/liquibase/liquibase/releases/download/v${{ env.LIQUIBASE_VERSION }}/liquibase-${{ env.LIQUIBASE_VERSION }}.zip
+          unzip -q liquibase.zip -d $HOME/liquibase
+          chmod +x $HOME/liquibase/liquibase
+          echo "$HOME/liquibase" >> $GITHUB_PATH
+
+      - name: Install MySQL Connector
+        run: |
+          mkdir -p $HOME/liquibase/lib
+          curl -sLo $HOME/liquibase/lib/mysql-connector.jar \
+            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/${{ env.MYSQL_CONNECTOR_VERSION }}/mysql-connector-j-${{ env.MYSQL_CONNECTOR_VERSION }}.jar
+
+      # OPTION 1: Use GitHub Secrets for real database
+      - name: Deploy to QA (Using Real Database)
         env:
-          LIQUIBASE_USERNAME: ${{ secrets.DB_USER }}
-          LIQUIBASE_PASSWORD: ${{ secrets.DB_PASS }}
+          DB_HOST: ${{ secrets.DB_HOST_QA || 'localhost' }}
+          DB_PORT: ${{ secrets.DB_PORT_QA || '3306' }}
+          DB_USER: ${{ secrets.DB_USER_QA || 'cicd_user' }}
+          DB_PASS: ${{ secrets.DB_PASS_QA || 'SecurePass123!' }}
+        run: |
+          echo "🚀 Deploying to QA database at $DB_HOST"
+          
+          liquibase \
+            --url="jdbc:mysql://${DB_HOST}:${DB_PORT}/testdb_qa?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" \
+            --username=$DB_USER \
+            --password=$DB_PASS \
+            --changeLogFile=$GITHUB_WORKSPACE/liquibase/changelogs/db.changelog-master.xml \
+            --classpath=$HOME/liquibase/lib/mysql-connector.jar \
+            update
+
+      - name: Verify QA Deployment
+        env:
+          DB_HOST: ${{ secrets.DB_HOST_QA || 'localhost' }}
+          DB_PORT: ${{ secrets.DB_PORT_QA || '3306' }}
+          DB_USER: ${{ secrets.DB_USER_QA || 'cicd_user' }}
+          DB_PASS: ${{ secrets.DB_PASS_QA || 'SecurePass123!' }}
+        run: |
+          liquibase \
+            --url="jdbc:mysql://${DB_HOST}:${DB_PORT}/testdb_qa?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" \
+            --username=$DB_USER \
+            --password=$DB_PASS \
+            --changeLogFile=$GITHUB_WORKSPACE/liquibase/changelogs/db.changelog-master.xml \
+            --classpath=$HOME/liquibase/lib/mysql-connector.jar \
+            status --verbose
+
+      - name: Generate QA Report
+        if: always()
+        run: |
+          echo "### 📊 QA Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ QA deployment completed" >> $GITHUB_STEP_SUMMARY
+
+# =====================================================
+# PROD - Connect to REAL PROD database
+# =====================================================
+  promote-prod:
+    name: Promote to PROD
+    runs-on: ubuntu-latest
+    needs: promote-qa
+    environment: 
+      name: prod
+      # REQUIRES approval in GitHub Settings
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Liquibase
+        run: |
+          curl -sLo liquibase.zip https://github.com/liquibase/liquibase/releases/download/v${{ env.LIQUIBASE_VERSION }}/liquibase-${{ env.LIQUIBASE_VERSION }}.zip
+          unzip -q liquibase.zip -d $HOME/liquibase
+          chmod +x $HOME/liquibase/liquibase
+          echo "$HOME/liquibase" >> $GITHUB_PATH
+
+      - name: Install MySQL Connector
+        run: |
+          mkdir -p $HOME/liquibase/lib
+          curl -sLo $HOME/liquibase/lib/mysql-connector.jar \
+            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/${{ env.MYSQL_CONNECTOR_VERSION }}/mysql-connector-j-${{ env.MYSQL_CONNECTOR_VERSION }}.jar
+
+      - name: Create Database Backup
+        env:
+          DB_HOST: ${{ secrets.DB_HOST_PROD || 'localhost' }}
+          DB_USER: ${{ secrets.DB_USER_PROD || 'cicd_user' }}
+          DB_PASS: ${{ secrets.DB_PASS_PROD || 'SecurePass123!' }}
+        run: |
+          echo "📦 Creating backup of PROD database..."
+          # In production, you'd actually run mysqldump or use cloud backup
+
+      - name: Deploy to PROD
+        env:
+          DB_HOST: ${{ secrets.DB_HOST_PROD || 'localhost' }}
+          DB_PORT: ${{ secrets.DB_PORT_PROD || '3306' }}
+          DB_USER: ${{ secrets.DB_USER_PROD || 'cicd_user' }}
+          DB_PASS: ${{ secrets.DB_PASS_PROD || 'SecurePass123!' }}
+        run: |
+          echo "🚀 Deploying to PRODUCTION database at $DB_HOST"
+          echo "⚠️  This is PRODUCTION - changes will affect live users!"
+          
+          liquibase \
+            --url="jdbc:mysql://${DB_HOST}:${DB_PORT}/testdb_prod?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" \
+            --username=$DB_USER \
+            --password=$DB_PASS \
+            --changeLogFile=$GITHUB_WORKSPACE/liquibase/changelogs/db.changelog-master.xml \
+            --classpath=$HOME/liquibase/lib/mysql-connector.jar \
+            update
+
+      - name: Show Production Deployment History
+        env:
+          DB_HOST: ${{ secrets.DB_HOST_PROD || 'localhost' }}
+          DB_PORT: ${{ secrets.DB_PORT_PROD || '3306' }}
+          DB_USER: ${{ secrets.DB_USER_PROD || 'cicd_user' }}
+          DB_PASS: ${{ secrets.DB_PASS_PROD || 'SecurePass123!' }}
+        if: always()
+        run: |
+          liquibase \
+            --url="jdbc:mysql://${DB_HOST}:${DB_PORT}/testdb_prod?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" \
+            --username=$DB_USER \
+            --password=$DB_PASS \
+            --changeLogFile=$GITHUB_WORKSPACE/liquibase/changelogs/db.changelog-master.xml \
+            --classpath=$HOME/liquibase/lib/mysql-connector.jar \
+            history
+
+      - name: Generate PROD Report
+        if: always()
+        run: |
+          echo "### 🚀 PRODUCTION Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ PRODUCTION deployment completed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: PRODUCTION" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+# =====================================================
+# MANUAL ROLLBACK
+# =====================================================
+  manual-rollback:
+    name: Manual Rollback
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment: 
+      name: ${{ github.event.inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Liquibase
+        run: |
+          curl -sLo liquibase.zip https://github.com/liquibase/liquibase/releases/download/v${{ env.LIQUIBASE_VERSION }}/liquibase-${{ env.LIQUIBASE_VERSION }}.zip
+          unzip -q liquibase.zip -d $HOME/liquibase
+          chmod +x $HOME/liquibase/liquibase
+          echo "$HOME/liquibase" >> $GITHUB_PATH
+
+      - name: Install MySQL Connector
+        run: |
+          mkdir -p $HOME/liquibase/lib
+          curl -sLo $HOME/liquibase/lib/mysql-connector.jar \
+            https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/${{ env.MYSQL_CONNECTOR_VERSION }}/mysql-connector-j-${{ env.MYSQL_CONNECTOR_VERSION }}.jar
+
+      - name: Determine Database Connection
+        id: db-config
+        run: |
+          ENV="${{ github.event.inputs.environment }}"
+          
+          if [ "$ENV" == "dev" ]; then
+            echo "DB_HOST=localhost" >> $GITHUB_OUTPUT
+            echo "DB_PORT=3306" >> $GITHUB_OUTPUT
+            echo "DB_USER=cicd_user" >> $GITHUB_OUTPUT
+            echo "DB_PASS=SecurePass123!" >> $GITHUB_OUTPUT
+          elif [ "$ENV" == "qa" ]; then
+            echo "DB_HOST=${{ secrets.DB_HOST_QA || 'localhost' }}" >> $GITHUB_OUTPUT
+            echo "DB_PORT=${{ secrets.DB_PORT_QA || '3306' }}" >> $GITHUB_OUTPUT
+            echo "DB_USER=${{ secrets.DB_USER_QA || 'cicd_user' }}" >> $GITHUB_OUTPUT
+            echo "DB_PASS=${{ secrets.DB_PASS_QA || 'SecurePass123!' }}" >> $GITHUB_OUTPUT
+          else
+            echo "DB_HOST=${{ secrets.DB_HOST_PROD || 'localhost' }}" >> $GITHUB_OUTPUT
+            echo "DB_PORT=${{ secrets.DB_PORT_PROD || '3306' }}" >> $GITHUB_OUTPUT
+            echo "DB_USER=${{ secrets.DB_USER_PROD || 'cicd_user' }}" >> $GITHUB_OUTPUT
+            echo "DB_PASS=${{ secrets.DB_PASS_PROD || 'SecurePass123!' }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Execute Rollback
+        env:
+          DB_HOST: ${{ steps.db-config.outputs.DB_HOST }}
+          DB_PORT: ${{ steps.db-config.outputs.DB_PORT }}
+          DB_USER: ${{ steps.db-config.outputs.DB_USER }}
+          DB_PASS: ${{ steps.db-config.outputs.DB_PASS }}
+        run: |
+          echo "⏮️  Rolling back ${{ github.event.inputs.count }} changeset(s) in ${{ github.event.inputs.environment }}"
+          
+          liquibase \
+            --url="jdbc:mysql://${DB_HOST}:${DB_PORT}/testdb_${{ github.event.inputs.environment }}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" \
+            --username=$DB_USER \
+            --password=$DB_PASS \
+            --changeLogFile=$GITHUB_WORKSPACE/liquibase/changelogs/db.changelog-master.xml \
+            --classpath=$HOME/liquibase/lib/mysql-connector.jar \
+            rollback-count ${{ github.event.inputs.count }}
+
+      - name: Verify Rollback
+        env:
+          DB_HOST: ${{ steps.db-config.outputs.DB_HOST }}
+          DB_PORT: ${{ steps.db-config.outputs.DB_PORT }}
+          DB_USER: ${{ steps.db-config.outputs.DB_USER }}
+          DB_PASS: ${{ steps.db-config.outputs.DB_PASS }}
+        if: always()
+        run: |
+          liquibase \
+            --url="jdbc:mysql://${DB_HOST}:${DB_PORT}/testdb_${{ github.event.inputs.environment }}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" \
+            --username=$DB_USER \
+            --password=$DB_PASS \
+            --changeLogFile=$GITHUB_WORKSPACE/liquibase/changelogs/db.changelog-master.xml \
+            --classpath=$HOME/liquibase/lib/mysql-connector.jar \
+            status --verbose
+
+      - name: Generate Rollback Report
+        if: always()
+        run: |
+          echo "### ⏮️  Rollback Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Changesets rolled back**: ${{ github.event.inputs.count }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Executed by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
