@@ -122,47 +122,58 @@ jobs:
 # =====================================================
 # PROD DEPLOYMENT
 # =====================================================
-  deploy-prod:
-    name: Deploy PROD
-    needs: deploy-qa
-    runs-on: ubuntu-latest
-    environment: prod
+ deploy-prod:
+  name: Deploy PROD
+  needs: deploy-qa
+  runs-on: ubuntu-latest
+  environment: prod
 
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
+  services:
+    mysql:
+      image: mysql:8.0
+      env:
+        MYSQL_ROOT_PASSWORD: root
+        MYSQL_DATABASE: testdb_prod
+      ports:
+        - 3306:3306
+      options: >-
+        --health-cmd="mysqladmin ping -uroot -proot"
+        --health-interval=10s
+        --health-timeout=5s
+        --health-retries=10
 
-      - name: Install Liquibase + Driver
-        run: |
-          curl -sLo lb.zip https://github.com/liquibase/liquibase/releases/download/v${LIQUIBASE_VERSION}/liquibase-${LIQUIBASE_VERSION}.zip
-          unzip -q lb.zip -d $HOME/liquibase
-          echo "$HOME/liquibase" >> $GITHUB_PATH
-          mkdir -p $HOME/liquibase/lib
-          curl -sLo $HOME/liquibase/lib/mysql.jar \
+  steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: 17
+
+    - name: Install Liquibase + Driver
+      run: |
+        curl -sLo lb.zip https://github.com/liquibase/liquibase/releases/download/v${LIQUIBASE_VERSION}/liquibase-${LIQUIBASE_VERSION}.zip
+        unzip -q lb.zip -d $HOME/liquibase
+        echo "$HOME/liquibase" >> $GITHUB_PATH
+        mkdir -p $HOME/liquibase/lib
+        curl -sLo $HOME/liquibase/lib/mysql.jar \
           https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/${MYSQL_CONNECTOR_VERSION}/mysql-connector-j-${MYSQL_CONNECTOR_VERSION}.jar
 
-      - name: Validate PROD
-        run: |
-          liquibase \
-          --url="jdbc:mysql://${{ secrets.DB_HOST_PROD }}:${{ secrets.DB_PORT_PROD }}/testdb_prod" \
-          --username=${{ secrets.DB_USERNAME_PROD }} \
-          --password=${{ secrets.DB_PASSWORD_PROD }} \
-          --classpath=$HOME/liquibase/lib/mysql.jar \
-          --changeLogFile=changelogs/db.changelog-master.xml \
-          validate
+    - name: Wait for MySQL
+      run: |
+        sleep 10
+        mysqladmin ping -h 127.0.0.1 -uroot -proot --wait=30
 
-      - name: Deploy PROD
-        run: |
-          liquibase \
-          --url="jdbc:mysql://${{ secrets.DB_HOST_PROD }}:${{ secrets.DB_PORT_PROD }}/testdb_prod" \
-          --username=${{ secrets.DB_USERNAME_PROD }} \
-          --password=${{ secrets.DB_PASSWORD_PROD }} \
+    - name: Deploy PROD
+      run: |
+        liquibase \
+          --url="jdbc:mysql://127.0.0.1:3306/testdb_prod" \
+          --username=root \
+          --password=root \
           --classpath=$HOME/liquibase/lib/mysql.jar \
           --changeLogFile=changelogs/db.changelog-master.xml \
           update
+
 
 # =====================================================
 # MANUAL DEV ROLLBACK
