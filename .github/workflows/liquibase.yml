@@ -71,7 +71,7 @@ jobs:
             --username=root \
             --password=root \
             --classpath=$HOME/liquibase/lib/mysql.jar \
-            --changeLogFile=liquibase/changelogs/db.changelog-master.xml \
+            --changeLogFile=changelogs/db.changelog-master.xml \
             validate
 
       - name: Deploy DEV
@@ -81,7 +81,7 @@ jobs:
             --username=root \
             --password=root \
             --classpath=$HOME/liquibase/lib/mysql.jar \
-            --changeLogFile=liquibase/changelogs/db.changelog-master.xml \
+            --changeLogFile=changelogs/db.changelog-master.xml \
             update
 
 # =====================================================
@@ -115,7 +115,7 @@ jobs:
             --username=${{ secrets.DB_USER_QA }} \
             --password=${{ secrets.DB_PASS_QA }} \
             --classpath=$HOME/liquibase/lib/mysql.jar \
-            --changeLogFile=liquibase/changelogs/db.changelog-master.xml \
+            --changeLogFile=changelogs/db.changelog-master.xml \
             update
 
 # =====================================================
@@ -149,7 +149,7 @@ jobs:
             --username=${{ secrets.DB_USER_PROD }} \
             --password=${{ secrets.DB_PASS_PROD }} \
             --classpath=$HOME/liquibase/lib/mysql.jar \
-            --changeLogFile=liquibase/changelogs/db.changelog-master.xml \
+            --changeLogFile=changelogs/db.changelog-master.xml \
             update
 
 # =====================================================
@@ -179,9 +179,9 @@ jobs:
       - name: Rollback
         run: |
           liquibase \
-            --url="jdbc:mysql://${{ secrets.DB_HOST_${{ github.event.inputs.environment | upper }} }}:${{ secrets.DB_PORT_${{ github.event.inputs.environment | upper }} }}/testdb_${{ github.event.inputs.environment }}" \
-            --username=${{ secrets.DB_USER_${{ github.event.inputs.environment | upper }} }} \
-            --password=${{ secrets.DB_PASS_${{ github.event.inputs.environment | upper }} }} \
+            --url="jdbc:mysql://${{ secrets[format('DB_HOST_{0}', github.event.inputs.environment)] }}:${{ secrets[format('DB_PORT_{0}', github.event.inputs.environment)] }}/testdb_${{ github.event.inputs.environment }}" \
+            --username=${{ secrets[format('DB_USER_{0}', github.event.inputs.environment)] }} \
+            --password=${{ secrets[format('DB_PASS_{0}', github.event.inputs.environment)] }} \
             --classpath=$HOME/liquibase/lib/mysql.jar \
-            --changeLogFile=liquibase/changelogs/db.changelog-master.xml \
+            --changeLogFile=changelogs/db.changelog-master.xml \
             rollback-count ${{ github.event.inputs.count }}

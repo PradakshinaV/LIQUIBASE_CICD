@@ -13,6 +13,9 @@
             </column>
             <column name="name" type="VARCHAR(100)"/>
         </createTable>
+        <rollback>
+            <dropTable tableName="users"/>
+        </rollback>
     </changeSet>
 
 </databaseChangeLog>

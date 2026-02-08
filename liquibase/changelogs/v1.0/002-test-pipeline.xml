@@ -6,10 +6,15 @@
       http://www.liquibase.org/xml/ns/dbchangelog
       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.33.xsd">
 
-    <changeSet id="005-test-pipeline" author="pradakshina" context="dev">
+    <changeSet id="002-test-pipeline" author="pradakshina">
         <insert tableName="users">
             <column name="name" value="PIPELINE CHECK"/>
         </insert>
+        <rollback>
+            <delete tableName="users">
+                <where>name = 'PIPELINE CHECK'</where>
+            </delete>
+        </rollback>
     </changeSet>
 
 </databaseChangeLog>
