@@ -97,8 +97,20 @@ jobs:
   deploy-qa:
     name: Deploy QA
     runs-on: ubuntu-latest
-    needs: deploy-dev
-    environment: qa   # approval enabled
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: testdb_qa
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     steps:
       - uses: actions/checkout@v4
@@ -108,24 +120,53 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Install Liquibase + Driver
+      - name: Install Liquibase
         run: |
           curl -sLo lb.zip https://github.com/liquibase/liquibase/releases/download/v${LIQUIBASE_VERSION}/liquibase-${LIQUIBASE_VERSION}.zip
           unzip -q lb.zip -d $HOME/liquibase
           echo "$HOME/liquibase" >> $GITHUB_PATH
+
+      - name: Install MySQL Connector
+        run: |
           mkdir -p $HOME/liquibase/lib
           curl -sLo $HOME/liquibase/lib/mysql.jar \
             https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/${MYSQL_CONNECTOR_VERSION}/mysql-connector-j-${MYSQL_CONNECTOR_VERSION}.jar
 
+      - name: Wait for MySQL
+        run: |
+          sleep 10
+          mysqladmin ping -h 127.0.0.1 -uroot -proot --wait=30
+
+      - name: Validate Changelog
+        run: |
+          liquibase \
+            --url="jdbc:mysql://127.0.0.1:3306/testdb_qa" \
+            --username=root \
+            --password=root \
+            --classpath=$HOME/liquibase/lib/mysql.jar \
+            --changeLogFile=changelogs/db.changelog-master.xml \
+            validate
+
       - name: Deploy QA
         run: |
           liquibase \
-            --url="jdbc:mysql://${{ secrets.DB_HOST_QA }}:${{ secrets.DB_PORT_QA }}/testdb_qa" \
-            --username=${{ secrets.DB_USERNAME_QA }} \
-            --password=${{ secrets.DB_PASSWORD_QA }} \
+            --url="jdbc:mysql://127.0.0.1:3306/testdb_qa" \
+            --username=root \
+            --password=root \
             --classpath=$HOME/liquibase/lib/mysql.jar \
             --changeLogFile=changelogs/db.changelog-master.xml \
             update
+
+      - name: QA History
+        run: |
+          liquibase \
+            --url="jdbc:mysql://127.0.0.1:3306/testdb_qa" \
+            --username=root \
+            --password=root \
+            --classpath=$HOME/liquibase/lib/mysql.jar \
+            --changeLogFile=changelogs/db.changelog-master.xml \
+            history || true
+
 
 # =====================================================
 # PROD DEPLOYMENT
