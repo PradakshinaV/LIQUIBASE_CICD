@@ -42,6 +42,33 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Debug - Check repository contents
+        run: |
+          echo "=========================================="
+          echo "Current directory:"
+          pwd
+          echo "=========================================="
+          echo "Files in root:"
+          ls -la
+          echo "=========================================="
+          echo "Looking for changelogs folder:"
+          if [ -d "changelogs" ]; then
+            echo "✓ changelogs folder EXISTS"
+            echo "Contents of changelogs:"
+            ls -la changelogs/
+            echo "Contents of changelogs/v1.0:"
+            ls -la changelogs/v1.0/
+            echo "db.changelog-master.xml contents:"
+            cat changelogs/db.changelog-master.xml
+          else
+            echo "✗ changelogs folder NOT FOUND"
+            echo "Searching for changelogs anywhere:"
+            find . -name "changelogs" -type d
+            find . -name "db.changelog-master.xml"
+          fi
+          echo "=========================================="
+      
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
