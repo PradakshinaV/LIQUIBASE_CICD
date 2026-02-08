@@ -1,0 +1,82 @@
+name: Liquibase CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+
+  dev-deploy:
+    name: Deploy to DEV
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Run Liquibase DEV
+        run: |
+          cd liquibase
+          liquibase \
+            --defaults-file=liquibase.dev.properties \
+            update
+        env:
+          LIQUIBASE_USERNAME: ${{ secrets.DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.DB_PASS }}
+
+  qa-deploy:
+    name: Deploy to QA
+    needs: dev-deploy
+    runs-on: ubuntu-latest
+    environment: qa
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Run Liquibase QA
+        run: |
+          cd liquibase
+          liquibase \
+            --defaults-file=liquibase.qa.properties \
+            update
+        env:
+          LIQUIBASE_USERNAME: ${{ secrets.DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.DB_PASS }}
+
+  prod-deploy:
+    name: Deploy to PROD
+    needs: qa-deploy
+    runs-on: ubuntu-latest
+    environment: prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Run Liquibase PROD
+        run: |
+          cd liquibase
+          liquibase \
+            --defaults-file=liquibase.prod.properties \
+            update
+        env:
+          LIQUIBASE_USERNAME: ${{ secrets.DB_USER }}
+          LIQUIBASE_PASSWORD: ${{ secrets.DB_PASS }}

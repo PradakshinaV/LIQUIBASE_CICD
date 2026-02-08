@@ -6,10 +6,9 @@
       http://www.liquibase.org/xml/ns/dbchangelog
       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.33.xsd">
 
-    <changeSet id="002-dev-users" author="pradakshina" context="dev">
+    <changeSet id="005-test-pipeline" author="pradakshina" context="dev">
         <insert tableName="users">
-            <column name="name" value="DEV USER"/>
-            <column name="email" value="dev@test.com"/>
+            <column name="name" value="PIPELINE CHECK"/>
         </insert>
     </changeSet>
 

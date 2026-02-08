@@ -12,7 +12,6 @@
                 <constraints primaryKey="true"/>
             </column>
             <column name="name" type="VARCHAR(100)"/>
-            <column name="email" type="VARCHAR(100)"/>
         </createTable>
     </changeSet>
 

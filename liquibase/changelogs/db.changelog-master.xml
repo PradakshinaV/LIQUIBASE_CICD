@@ -7,9 +7,5 @@
       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.33.xsd">
 
     <include file="v1.0/001-create-users.xml" relativeToChangelogFile="true"/>
-    <include file="v1.0/002-insert-dev-users.xml" relativeToChangelogFile="true"/>
-    <include file="v1.0/003-insert-qa-users.xml" relativeToChangelogFile="true"/>
-    <include file="v1.0/004-prod-index.xml" relativeToChangelogFile="true"/>
-    <include file="v1.0/005-test-pipeline.xml" relativeToChangelogFile="true"/>
-
+    <include file="v1.0/002-test-pipeline.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
