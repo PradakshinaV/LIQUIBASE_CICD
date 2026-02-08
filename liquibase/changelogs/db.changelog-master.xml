@@ -4,12 +4,12 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="
       http://www.liquibase.org/xml/ns/dbchangelog
-      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.23.xsd">
+      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.33.xsd">
 
     <include file="v1.0/001-create-users.xml" relativeToChangelogFile="true"/>
-    <include file="v1.0/002-insert-users.xml" relativeToChangelogFile="true"/>
-        <include file="v1.0/003-add-phone.xml" relativeToChangelogFile="true"/>
-<include file="v1.0/004-add-table.xml" relativeToChangelogFile="true"/>
-    <!-- Removed 003-add-email-column.xml as email column already exists in 001 -->
+    <include file="v1.0/002-insert-dev-users.xml" relativeToChangelogFile="true"/>
+    <include file="v1.0/003-insert-qa-users.xml" relativeToChangelogFile="true"/>
+    <include file="v1.0/004-prod-index.xml" relativeToChangelogFile="true"/>
+    <include file="v1.0/005-test-pipeline.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
